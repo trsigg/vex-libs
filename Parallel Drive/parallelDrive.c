@@ -24,6 +24,8 @@
 	5. Whenever the drive should be updated (probably once every input cycle) include the following line of code
 			| driveRuntime(driveName)
 	   Where driveName is the same as in the previous step
+
+	6. To explicitly set drive power, use setDrivePower(driveName, leftPower, rightPower), setRightPower(driveName, power), or setLeftPower(driveName, power)
 */
 
 #define numLeftMotors 2
@@ -63,12 +65,29 @@ void initializeDrive(parallel_drive &drive, tMotor *leftMotorsPtr, tMotor *right
 
 	//arrays are stupid in robotc so I have to do this
 	for (int i=0; i<numLeftMotors; i++) { //copy motors into drive.leftMotors
-		drive.leftMotors[i] = *(leftMotorsPtr + i); //TODO: multipy i by the size of a tMotor
+		drive.leftMotors[i] = *(leftMotorsPtr + i); //TODO: multipy i by the size of a tMotor (could be resolved by passing motor arrays as tMotor &motorArray?)
 	}
 
 	for (int i=0; i<numRightMotors; i++) { //copy motors into drive.rightMotors
 		drive.rightMotors[i] = *(rightMotorsPtr + i);
 	}
+}
+
+void setLeftPower (parallel_drive &drive, int power) {
+	for (int i=0; i<numLeftMotors; i++) {
+		motor[ drive.leftMotors[i] ] = power;
+	}
+}
+
+void setRightPower (parallel_drive &drive, int power) {
+	for (int i=0; i<numRightMotors; i++) {
+		motor[ drive.rightMotors[i] ] = power;
+	}
+}
+
+void setDrivePower (parallel_drive &drive, int left, int right) {
+	setLeftPower(drive, left);
+	setRightPower(drive, right);
 }
 
 void setDriveSide(parallel_drive &drive, bool leftSide) {
@@ -95,9 +114,11 @@ void setDriveSide(parallel_drive &drive, bool leftSide) {
 		}
 	}
 
-	//cycle through motors on drive side and set them to drivePower
-	for (int i=0; i < (leftSide ? numLeftMotors : numRightMotors); i++) {
-		motor[ leftSide ? drive.leftMotors[i] : drive.rightMotors[i] ] = drivePower;
+	//set drive motor power
+	if (leftSide) {
+		setLeftPower(drivePower);
+	} else {
+		setRightPower(drivePower);
 	}
 }
 
