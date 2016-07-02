@@ -19,7 +19,7 @@
 	   The number in brackets after rightMotors and leftMotors should correspond to the number of motor ports used on that side of the drive and the numbers changed in step 3
 	   The optional arguments of initializeDrive can be used to further configure the drive
 	   	e.g. a user creating a drive with ramping and quadratic input mapping would substitute the fourth line of code with:
-	   	| initializeDrive(driveName, &leftMotors, &rightMotors, true, 20, 10, 2);
+	   	| initializeDrive(driveName, &(leftMotors[0]), &(rightMotors[0]), true, 20, 10, 2);
 
 	5. Whenever the drive should be updated (probably once every input cycle) include the following line of code
 			| driveRuntime(driveName)
