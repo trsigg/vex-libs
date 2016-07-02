@@ -7,7 +7,7 @@
 	2. Include this line near the top of your code:
 			| #include "parallelDrive.c"
 
-	3. Change #define statements on lines 29 and 30 of this file to the number of motor ports used by each side of the drive
+	3. Change #define statements on lines 35 and 36 of this file to the number of motor ports used by each side of the drive
 
 	4. To create drive, include the following lines in your code:
 			| parallel_drive driveName;
@@ -26,10 +26,16 @@
 	   Where driveName is the same as in the previous step
 
 	6. To explicitly set drive power, use setDrivePower(driveName, leftPower, rightPower), setRightPower(driveName, power), or setLeftPower(driveName, power)
+
+	7. To attach sensors, call attachGyro(driveName, gyro), attachEncoderL(driveName, leftEncoder), or attachEncoderR(driveName, rightEncoder), where gyro, leftEncoder, and rightEncoder are the names assigned in sensor setup 
+
+	8. To explicitly control how encoders are used for distance measurement, call setEncoderConfig(driveName, config) where config is NONE, LEFT, RIGHT, or AVERAGE
 */
 
 #define numLeftMotors 2
 #define numRightMotors 2
+
+enum encoderConfig { NONE, LEFT, RIGHT, AVERAGE };
 
 typedef union {
 	struct {
@@ -43,6 +49,10 @@ typedef union {
 		//internal variables for ramping
 		long lastUpdatedLeft;
 		long lastUpdatedRight;
+		//associated sensors
+		encoderConfig encoderConfig;
+		bool hasGyro, hasEncoderL, hasEncoderR;
+		tSensors gyro, leftEncoder, rightEncoder;
 	};
 
 	//motor ports used for drive
@@ -73,6 +83,45 @@ void initializeDrive(parallel_drive &drive, tMotor *leftMotorsPtr, tMotor *right
 	}
 }
 
+
+//sensor setup region
+void updateEncoderConfig(parallel_drive &drive) {
+	if (drive.hasEncoderL) {
+		if (drive.hasEncoderR) {
+			drive.encoderConfig = AVERAGE;
+		} else {
+			drive.encoderConfig = LEFT;
+		}
+	} else {
+		drive.encoderConfig = RIGHT; //safe assuming nothig but attachEncoder functions call this
+	}
+}
+
+void attachEncoderL(parallel_drive &drive, tSensors encoder) {
+	drive.leftEncoder = encoder;
+	drive.hasEncoderL = true;
+	updateEncoderConfig(drive);
+}
+
+void attachEncoderR(parallel_drive &drive, tSensors encoder) {
+	drive.righttEncoder = encoder;
+	drive.hasEncoderR = true;
+	updateEncoderConfig(drive);
+}
+
+
+void attachGyro(parallel_drive &drive, tSensors gyro) {
+	drive.gyro = gyro;
+	drive.hasGyro = true;
+}
+
+void setEncoderConfig(parallel_drive &drive, encoderConfig config) {
+	drive.encoderConfig = config;
+}
+//end sensor setup region
+
+
+//set drive power region
 void setLeftPower (parallel_drive &drive, int power) {
 	for (int i=0; i<numLeftMotors; i++) {
 		motor[ drive.leftMotors[i] ] = power;
@@ -89,6 +138,8 @@ void setDrivePower (parallel_drive &drive, int left, int right) {
 	setLeftPower(drive, left);
 	setRightPower(drive, right);
 }
+//end set drive power region
+
 
 void setDriveSide(parallel_drive &drive, bool leftSide) {
 	int drivePower = 127 * drive.powerCoeff * exp(drive.powMap * log(vexRT[ leftSide ? drive.leftInput : drive.rightInput ] / 127)); //adjust input using powMap and powerCoeff
