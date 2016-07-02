@@ -32,8 +32,7 @@
 typedef union {
 	struct {
 		bool isRamped; //whether drive is ramped
-		int maxAcc100ms; //if ramping, maximum change in motor power in 100 ms
-		int msPerPowerChange; //calculated using maxAcc100ms
+		int msPerPowerChange; //if ramping, time between motor power changes, calculated using maxAcc100ms
 		int deadband; //range of motor values around 0 for which motors are not engaged
 		float powMap; //degree of polynomial to which inputs are mapped (1 for linear)
 		float powerCoeff; //factor by which motor speeds are multiplied
@@ -53,7 +52,6 @@ typedef union {
 void initializeDrive(parallel_drive &drive, tMotor *leftMotorsPtr, tMotor *rightMotorsPtr, bool isRamped=false, int maxAcc100ms=20, int deadband=10, float powMap=1, float powerCoeff=1, TVexJoysticks leftInput=Ch3, TVexJoysticks rightInput=Ch2) {
 	//initialize drive variables
 	drive.isRamped = isRamped;
-	drive.maxAcc100ms;
 	drive.msPerPowerChange = 100 / maxAcc100ms;
 	drive.deadband = deadband;
 	drive.powMap = powMap;
@@ -80,7 +78,7 @@ void setDriveSide(parallel_drive &drive, bool leftSide) {
 
 	//handle ramping
 	if (drive.isRamped) {
-		long *lastUpdatePtr = (leftSide ? drive.lastUpdatedLeft : drive.lastUpdatedRight);
+		long *lastUpdatePtr = (leftSide ? &drive.lastUpdatedLeft : &drive.lastUpdatedRight);
 		long now = nPgmTime;
 		int elapsed = now - *lastUpdatePtr;
 		int currentPower = motor[ leftSide ? drive.leftMotors[0] : drive.rightMotors[0] ];
