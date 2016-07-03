@@ -7,9 +7,12 @@
 	2. Include this line near the top of your code:
 			| #include "parallelDrive.c"
 
-	3. Change #define statements on lines 35 and 36 of this file to the number of motor ports used by each side of the drive
+	3. Change #define statements below to the number of motor ports used by each side of the drive */
 
-	4. To create drive, include the following lines in your code:
+#define numLeftMotors 2
+#define numRightMotors 2
+
+/*	4. To create drive, include the following lines in your code:
 			| parallel_drive driveName;
 			| tMotor leftMotors[3] = {left1, left2, left3};
 			| tMotor rightMotors[3] = {right1, right2, right3};
@@ -30,10 +33,9 @@
 	7. To attach sensors, call attachGyro(driveName, gyro), attachEncoderL(driveName, leftEncoder), or attachEncoderR(driveName, rightEncoder), where gyro, leftEncoder, and rightEncoder are the names assigned in sensor setup 
 
 	8. To explicitly control how encoders are used for distance measurement, call setEncoderConfig(driveName, config) where config is NONE, LEFT, RIGHT, or AVERAGE
-*/
 
-#define numLeftMotors 2
-#define numRightMotors 2
+	9. To access a sensor value, call encoderVal(driveName), encoderVal_L(driveName), encoderVal_R(driveName), or gyroVal(driveName)
+*/
 
 enum encoderConfig { NONE, LEFT, RIGHT, AVERAGE };
 
@@ -119,6 +121,45 @@ void setEncoderConfig(parallel_drive &drive, encoderConfig config) {
 	drive.encoderConfig = config;
 }
 //end sensor setup region
+
+
+//sensor access region
+int encoderVal(parallel_drive &drive) {
+	if (drive.encoderConfig==AVERAGE && drive.hasEncoderL && drive.hasEncoderR) {
+		return (SensorValue[drive.leftEncoder] + SensorValue[drive.rightEncoder]) / 2;
+	} else if (drive.encoderConfig==LEFT && drive.hasEncoderL) {
+		return SensorValue[drive.leftEncoder];
+	} else if (drive.encoderConfig==RIGHT && drive.hasEncoderR) {
+		return SensorValue[drive.rightEncoder];
+	}
+
+	return 0;
+}
+
+int encoderVal_L(parallel_drive &drive) {
+	if (drive.hasEncoderL) {
+		return SensorValue[drive.leftEncoder];
+	} else {
+		return 0;
+	}
+}
+
+int encoderVal_R(parallel_drive &drive) {
+	if (drive.hasEncoderR) {
+		return SensorValue[drive.rightEncoder];
+	} else {
+		return 0;
+	}
+}
+
+int gyroVal(parallel_drive &drive) {
+	if (drive.hasGyro) {
+		return SensorValue[drive.gyro];
+	} else {
+		return 0;
+	}
+}
+//end sensor access region
 
 
 //set drive power region
