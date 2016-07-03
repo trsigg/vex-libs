@@ -35,6 +35,8 @@
 	8. To explicitly control how encoders are used for distance measurement, call setEncoderConfig(driveName, config) where config is NONE, LEFT, RIGHT, or AVERAGE
 
 	9. To access a sensor value, call encoderVal(driveName), encoderVal_L(driveName), encoderVal_R(driveName), or gyroVal(driveName)
+
+	10. To clear a sensor, call clearEncoders(driveName), clearLeft(driveName), clearRight(driveName), or clearGyro(driveName)
 */
 
 enum encoderConfig { NONE, LEFT, RIGHT, AVERAGE };
@@ -152,11 +154,34 @@ int encoderVal_R(parallel_drive &drive) {
 	}
 }
 
+void clearLeft(parallel_drive &drive) {
+	if (drive.hasEncoderL) {
+		SensorValue[drive.leftEncoder] = 0;
+	}
+}
+
+void clearRight(parallel_drive &drive) {
+	if (drive.hasEncoderR) {
+		SensorValue[drive.rightEncoder] = 0;
+	}
+}
+
+void clearEncoders(parallel_drive &drive) {
+	clearLeft(drive);
+	clearRight(drive);
+}
+
 int gyroVal(parallel_drive &drive) {
 	if (drive.hasGyro) {
 		return SensorValue[drive.gyro];
 	} else {
 		return 0;
+	}
+}
+
+void clearGyro(parallel_drive &drive) {
+	if (drive.hasGyro) {
+		SensorValue[drive.gyro] = 0;
 	}
 }
 //end sensor access region
