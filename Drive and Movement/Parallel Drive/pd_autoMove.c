@@ -8,13 +8,17 @@
 			| #include "pd_autoMove.c"
 
 -----------------  FOR TURNING  -----------------
-	1. To turn, call turn(driveName, degreesToTurn) where driveName is a parallel_drive object with a gyro attached
+	1. Call turn(driveName, degreesToTurn) where driveName is a parallel_drive object with a gyro attached
 	    Optional arguments can be used to configure the drive power during turning, whether to run as a task or function, and the duration of the delay at the end of the turn
 
 	2. The variable turnData.isTurning holds the status of the turn (true if turning, false otherwise)
 
 -----------------  FOR DRIVING  -----------------
-	1. 
+	1. Call driveStraight(driveName, clicks) where driveName is a parallel_drive object and clicks is the distance to drive in encoder clicks
+		Optional arguments can be used to configure the delay at the end of a drive maneuver, motor power during driving, whether to run as a task or function,
+		the timeout duration, correction coefficient, sample time, initial difference in power between master and slave sides of the drive, and sensors used for correction
+
+	2. The variable driveData.isDriving holds the status of the maneuver (true if driving, false otherwise)
 */
 
 #include "parallelDrive.c"
