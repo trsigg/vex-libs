@@ -97,7 +97,8 @@ struct driveData {
 	int clicks; //distance to drive, in encoder clicks
 	int delayAtEnd; //duration of pause at end of driving
 	int power; //motor power while driving
-	int timeout; //amount of time after which a drive action times out (ceases)
+	int minSpeed; //minimum speed during maneuver to prevent timeout (encoder clicks per 100ms)
+	int timeout; //amount of time after which a drive action sensing lower speed than minSpeed ceases (ms)
 	float coeff; //correction coefficient, controls how agressively drive reacts to errors
 	int sampleTime; //time between motor power adjustments
 	correctionType correctionType; //which sensor inputs are used for correction
@@ -117,6 +118,7 @@ bool drivingComplete() {
 void driveStraightRuntime() {
 	setDrivePower(driveData.drive, driveData.slavePower * driveData.direction, driveData.power * driveData.direction);
 
+	//calculate error value
 	if (driveData.correctionType == GYRO) {
 		driveData.error = gyroVal(driveData.drive);
 	} else if (driveData.correctionType == ENCODER) {
@@ -125,9 +127,11 @@ void driveStraightRuntime() {
 		driveData.error = 0;
 	}
 
+	//adjust slavePower based on error
 	driveData.slavePower += driveData.error * driveData.direction / driveData.coeff;
 
 	driveData.totalClicks += encoderVal(driveData.drive);
+	if (encoderVal(driveData.drive)*100/driveData.sampleTime > driveData.minSpeed) driveData.timer = resetTimer(); //track timeout state
 	clearEncoders(driveData.drive);
 }
 
@@ -156,13 +160,14 @@ void setCorrectionType(type) {
 	}
 }
 
-void driveStraight(parallel_drive &drive, int clicks, int delayAtEnd=250, int power=60, bool startAsTask=false, int timeout=15000, coeff=300, int sampleTime=100, int powDiff=5, correctionType correctionType=AUTO) {
+void driveStraight(parallel_drive &drive, int clicks, int delayAtEnd=250, int power=60, bool startAsTask=false, int minSpeed=20, int timeout=800, coeff=300, int sampleTime=100, int powDiff=5, correctionType correctionType=AUTO) {
 	//initialize variables
 	driveData.drive = drive;
 	driveData.clicks = abs(clicks);
 	driveData.direction = sgn(clicks);
 	driveData.power = power;
 	driveData.delayAtEnd = delayAtEnd;
+	driveData.minSpeed = minSpeed;
 	driveData.timeout = timeout;
 	driveData.coeff = coeff;
 	driveData.sampleTime = sampleTime;

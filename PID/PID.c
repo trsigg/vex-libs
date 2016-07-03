@@ -51,6 +51,7 @@ float PID_runtime(PID &pid) {
 		float error = pid.target - *(pid.input);
 		pid.output = kP*error + kI*elapsed*(error + pid.lastError)/2 + kD*(error - pid.lastError)/elapsed;
 		pid.lastError = error;
-		return pid.output;
 	}
+
+	return pid.output;
 }
