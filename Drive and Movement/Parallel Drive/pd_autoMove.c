@@ -7,10 +7,14 @@
 	2. Include this line near the top of your code:
 			| #include "pd_autoMove.c"
 
-	3. To turn, call turn(driveName, degreesToTurn) where driveName is a parallel_drive object with a gyro attached
+-----------------  FOR TURNING  -----------------
+	1. To turn, call turn(driveName, degreesToTurn) where driveName is a parallel_drive object with a gyro attached
 	    Optional arguments can be used to configure the drive power during turning, whether to run as a task or function, and the duration of the delay at the end of the turn
 
-	4. The variable turnData.isTurning holds the status of the turn (true if turning, false otherwise)
+	2. The variable turnData.isTurning holds the status of the turn (true if turning, false otherwise)
+
+-----------------  FOR DRIVING  -----------------
+	1. 
 */
 
 #include "parallelDrive.c"
@@ -36,7 +40,7 @@ struct turnData {
 };
 
 bool turnIsComplete() {
-	return abs(SensorValue[turnData.drive.gyro]) >= abs(turnData.degreesToTurn)
+	return abs(gyroVal(turnData.drive)) >= abs(turnData.degreesToTurn)
 }
 
 void turnEnd() {
@@ -55,16 +59,17 @@ task turnTask() {
 	turnEnd();
 }
 
-void turn(parallel_drive &drive, float _degreesToTurn_, int _power_=50, bool runAsTask=false, int _waitAtEnd_=250) {
+void turn(parallel_drive &drive, float degreesToTurn, int power=50, bool runAsTask=false, int waitAtEnd=250) {
 	if (drive.hasGyro) {
+		//initialize variables
 		turnData.drive = drive;
-		turnData.degreesToTurn = _degreesToTurn_ * 10; //gyro outputs are in degrees*10
-		turnData.power = _power_;
-		turnData.waitAtEnd = (_waitAtEnd_>250 ? _waitAtEnd_-250 : 0);
+		turnData.degreesToTurn = degreesToTurn * 10; //gyro outputs are in degrees*10
+		turnData.power = power;
+		turnData.waitAtEnd = (waitAtEnd>250 ? waitAtEnd-250 : 0);
 		turnData.isTurning = true;
-		turnData.direction = sgn(_degreesToTurn_)
+		turnData.direction = sgn(degreesToTurn)
 
-		SensorValue[ turnData.drive.gyro ] = 0; //clear the gyro
+		gyroVal(turnData.drive) = 0; //clear the gyro
 		setDrivePower(turnData.drive, turnData.direction*turnData.power, -turnData.direction*turnData.power); //begin turn
 
 		if (runAsTask) {
@@ -77,3 +82,112 @@ void turn(parallel_drive &drive, float _degreesToTurn_, int _power_=50, bool run
 	}
 }
 //end turning region
+
+
+//driveStraight region
+enum correctionType { NONE, GYRO, ENCODER, AUTO };
+
+struct driveData {
+	parallel_drive *drive;
+	int clicks; //distance to drive, in encoder clicks
+	int delayAtEnd; //duration of pause at end of driving
+	int power; //motor power while driving
+	int timeout; //amount of time after which a drive action times out (ceases)
+	float coeff; //correction coefficient, controls how agressively drive reacts to errors
+	int sampleTime; //time between motor power adjustments
+	correctionType correctionType; //which sensor inputs are used for correction
+	bool isDriving; //whether driving action is being executed (true if driving, false othrewise)
+	//interal variables
+	int direction; //sign of clicks
+	int totalClicks; //distance traveled so far
+	int slavePower; //power of right side of drive
+	int error; //calculated from gyro or encoders
+};
+
+
+void driveStraightRuntime() {
+	setDrivePower(driveData.drive, driveData.slavePower * driveData.direction, driveData.power * driveData.direction);
+
+	if (driveData.correctionType == GYRO) {
+		driveData.error = gyroVal(driveData.drive);
+	} else if (driveData.correctionType == ENCODER) {
+		driveData.error = encoderVal_R(driveData.drive) - encoderVal_L(driveData.drive);
+	} else {
+		driveData.error = 0;
+	}
+
+	driveData.slavePower += driveData.error * driveData.direction / driveData.coeff;
+
+	driveData.totalClicks += encoderVal(driveData.drive);
+	clearEncoders(driveData.drive);
+}
+
+void driveStraightEnd() {
+	setDrivePower(driveData.drive, 0, 0);
+	wait1Msec(driveData.delayAtEnd);
+	driveData.isDriving = false;
+}
+
+task driveStraightTask() {
+	while (abs(totalClicks) < clicks  && time1(driveTimer) < timeout) {
+		driveStraightRuntime();
+
+		wait1Msec(driveData.sampleTime);
+	}
+	driveStraightEnd();
+}
+
+void setCorrectionType(type) {
+	if (type==GYRO && driveData.drive.hasGyro) {
+		driveData.correctionType = GYRO;
+	} else if (type==ENCODER && driveData.drive.hasEncoderL && driveData.drive.hasEncoderR) {
+		driveData.correctionType = ENCODER;
+	} else {
+		driveData.correctionType = NONE;
+	}
+}
+
+void driveStraight(parallel_drive &drive, int clicks, int delayAtEnd=250, int power=60, bool startAsTask=false, int timeout=15000, coeff=300, int sampleTime=100, int powDiff=5, correctionType correctionType=AUTO) {
+	//initialize variables
+	driveData.drive = drive;
+	driveData.clicks = abs(clicks);
+	driveData.direction = sgn(clicks);
+	driveData.power = power;
+	driveData.delayAtEnd = delayAtEnd;
+	driveData.timeout = timeout;
+	driveData.coeff = coeff;
+	driveData.sampleTime = sampleTime;
+	driveData.isDriving = true;
+
+	driveData.totalClicks = 0;
+	driveData.slavePower = power - powDiff;
+	driveData.error = 0;
+
+	if (correctionType == AUTO) {
+		setCorrectionType(GYRO);
+
+		if (driveData.correctionType == NONE) {
+			setCorrectionType(ENCODER)
+		}
+	} else {
+		setCorrectionType(correctionType);
+	}
+
+	//initialize sensors
+	clearEncoders(driveData.drive);
+	clearGyro(driveData.drive);
+
+	clearTimer(driveTimer);
+
+	if (startAsTask) {
+		startTask(driveStraightTask);
+	}
+	else { //runs as function
+		while (abs(totalClicks) < clicks  && time1(driveTimer) < timeout) {
+			driveStraightRuntime();
+			wait1Msec(driveData.sampleTime);
+		}
+		driveStraightEnd();
+	}
+}
+//end driveStraight region
