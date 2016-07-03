@@ -2,7 +2,7 @@
 /////////////////  INSTRUCTIONS  /////////////////
 
 
-	1. Save this file in the same directory as your code
+	1. Save this file as well as parallelDrive.c and timer.c in the same directory as your code
 
 	2. Include this line near the top of your code:
 			| #include "pd_autoMove.c"
@@ -22,6 +22,7 @@
 */
 
 #include "parallelDrive.c"
+#include "timer.c"
 
 int limit(int input, int min, int max) {
 	if (input <= max && input >= min) {
@@ -106,8 +107,12 @@ struct driveData {
 	int totalClicks; //distance traveled so far
 	int slavePower; //power of right side of drive
 	int error; //calculated from gyro or encoders
+	long timer; //for tracking timeout
 };
 
+bool drivingComplete() {
+	return abs(driveData.totalClicks)<driveData.clicks  && time(driveData.timer)<driveData.timeout
+}
 
 void driveStraightRuntime() {
 	setDrivePower(driveData.drive, driveData.slavePower * driveData.direction, driveData.power * driveData.direction);
@@ -133,7 +138,7 @@ void driveStraightEnd() {
 }
 
 task driveStraightTask() {
-	while (abs(totalClicks) < clicks  && time1(driveTimer) < timeout) {
+	while (!drivingComplete()) {
 		driveStraightRuntime();
 
 		wait1Msec(driveData.sampleTime);
@@ -181,13 +186,13 @@ void driveStraight(parallel_drive &drive, int clicks, int delayAtEnd=250, int po
 	clearEncoders(driveData.drive);
 	clearGyro(driveData.drive);
 
-	clearTimer(driveTimer);
+	driveData.timer = resetTimer();
 
 	if (startAsTask) {
 		startTask(driveStraightTask);
 	}
 	else { //runs as function
-		while (abs(totalClicks) < clicks  && time1(driveTimer) < timeout) {
+		while (!drivingComplete()) {
 			driveStraightRuntime();
 			wait1Msec(driveData.sampleTime);
 		}
