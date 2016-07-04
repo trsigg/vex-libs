@@ -28,6 +28,7 @@ typedef union {
 		float target;
 		int minSampleTime; //minimum time between sampling input in milliseconds
 		bool inputUpdated; //can optionally be used to signal when input has been updated
+		float integralMin, integralMax; //minimum and maximum error value which will be added to integral
 		float output; //can be used to refer to most recent output
 		//internal variables
 		long lastUpdated;
@@ -36,7 +37,7 @@ typedef union {
 	};
 } PID;
 
-void initializePID(PID &pid, float *input, float kP, float kI, float kD, float target, int minSampleTime=30, bool inputUpdated=true) {
+void initializePID(PID &pid, float *input, float kP, float kI, float kD, float target, int minSampleTime=30, bool inputUpdated=true, float integralMin=NULL, float integralMax=NULL) {
 	pid.input = input;
 	pid.kP = kP;
 	pid.kI = kI;
@@ -44,6 +45,8 @@ void initializePID(PID &pid, float *input, float kP, float kI, float kD, float t
 	pid.target = target;
 	pid.minSampleTime = minSampleTime;
 	pid.inputUpdated = inputUpdated;
+	pid.integralMin = integralMin;
+	pid.integralMax = integralMax;
 	pid.integral = 0;
 }
 
@@ -54,7 +57,9 @@ float PID_runtime(PID &pid) {
 
 	if (pid.inputUpdated && elapsed > pid.minSampleTime) {
 		float error = pid.target - *(pid.input);
-		pid.integral += (error + pid.lastError)*elapsed/2;
+
+		pid.integral += (!integralMin || error>integralMin) && (!integralMax || error>integralMax) ? (error + pid.lastError)*elapsed/2 : 0; //update integral if within bounds of integralMin and integralMax
+
 		pid.output = kP*error + kI*pid.integral + kD*(error - pid.lastError)/elapsed;
 		pid.lastError = error;
 	}
