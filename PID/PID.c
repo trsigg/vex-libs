@@ -14,8 +14,11 @@
 		 The optional arguments can be used to configure the minimum sample time and initial state of the inputUpdated variable
 
 	4. Whenever the controller should be updated (probably once every input cycle) include the following line of code:
-			| PID_runtime(pidName)
+			| PID_runtime(pidName);
 	    Where pidName is the same as in the previous step
+
+	5. To change the target value of the PID loop, use
+			| pidName.target = newTarget;
 */
 
 typedef union {
@@ -28,11 +31,12 @@ typedef union {
 		float output; //can be used to refer to most recent output
 		//internal variables
 		long lastUpdated;
+		float integral;
 		float prevError; 
 	};
 } PID;
 
-void initiatePID(PID &pid, float *input, float kP, float kI, float kD, float target, int minSampleTime=30, bool inputUpdated=true) {
+void initializePID(PID &pid, float *input, float kP, float kI, float kD, float target, int minSampleTime=30, bool inputUpdated=true) {
 	pid.input = input;
 	pid.kP = kP;
 	pid.kI = kI;
@@ -40,6 +44,7 @@ void initiatePID(PID &pid, float *input, float kP, float kI, float kD, float tar
 	pid.target = target;
 	pid.minSampleTime = minSampleTime;
 	pid.inputUpdated = inputUpdated;
+	pid.integral = 0;
 }
 
 float PID_runtime(PID &pid) {
@@ -49,7 +54,8 @@ float PID_runtime(PID &pid) {
 
 	if (pid.inputUpdated && elapsed > pid.minSampleTime) {
 		float error = pid.target - *(pid.input);
-		pid.output = kP*error + kI*elapsed*(error + pid.lastError)/2 + kD*(error - pid.lastError)/elapsed;
+		pid.integral += (error + pid.lastError)*elapsed/2;
+		pid.output = kP*error + kI*pid.integral + kD*(error - pid.lastError)/elapsed;
 		pid.lastError = error;
 	}
 
