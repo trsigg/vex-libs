@@ -2,14 +2,14 @@
 /////////////////  INSTRUCTIONS  /////////////////
 
 
-	1. Save this file as well as parallelDrive.c and timer.c in the same directory as your code
+	1. Save this file as well as coreIncludes.c, parallelDrive.c, PID.c, and timer.c in the same directory as your code
 
 	2. Include this line near the top of your code:
 			| #include "pd_autoMove.c"
 
 -----------------  FOR TURNING  -----------------
 	1. Call turn(driveName, degreesToTurn) where driveName is a parallel_drive object with a gyro attached
-	    Optional arguments can be used to configure the drive power during turning, whether to run as a task or function, and the duration of the delay at the end of the turn
+	    Optional arguments can be used to configure whether to run as a task or function, the duration of the delay at the end of the turn, and the equation used to determine motor powers throughout the maneuver
 
 	2. The variable turnData.isTurning holds the status of the turn (true if turning, false otherwise)
 
@@ -21,37 +21,38 @@
 	2. The variable driveData.isDriving holds the status of the maneuver (true if driving, false otherwise)
 */
 
+#include "coreIncludes.c"
 #include "parallelDrive.c"
+#include "PID.c"
 #include "timer.c"
-
-int limit(int input, int min, int max) {
-	if (input <= max && input >= min) {
-		return input;
-	}
-	else {
-		return (input > max ? max : min);
-	}
-}
 
 
 //turning region
 struct turnData {
 	parallel_drive *drive;
 	int degreesToTurn; //positive for clockwise, negative for counterclockwise
-	int power; //motor power during turning
-	int waitAtEnd; //delay after turning (default 250ms for braking)
+	int waitAtEnd; //delay after finishing turn (default 100ms for braking)
+	float coeff; //coefficient in ramping equation. Use a negative input to have it autocalculated based on a motor power value instead (it will be set to a value such that the maximum motor power during the turn is the value provided)
+	float exponent; //exponent in ramping equation.  Higher values mean drive accelerates faster and slows more gradually, and vice-versa
 	bool isTurning; //whether turn is executing (useful for running as task)
-	int direction; //internal variable (sign of degreesToTurn)
+	int direction; //internal variable, sign of degreesToTurn
 };
 
 bool turnIsComplete() {
-	return abs(gyroVal(turnData.drive)) >= abs(turnData.degreesToTurn)
+	return abs(gyroVal(turnData.drive)) >= abs(turnData.degreesToTurn) //might need to be &turnData.drive. I dunno.
+}
+
+void turnRuntime() {
+	int gyro = abs(gyroVal(turnData.drive));
+	int power = turnData.coeff * gyro * pow(turnData.degreesToTurn - gyro, turnData.exponent);
+
+	setDrivePower(turnData.drive, direction * power, -direction * power);
 }
 
 void turnEnd() {
 	//brake
-	setDrivePower(turnData.drive, -turnData.direction * 10, turnData.direction * 10); //might need to be *(turnData.drive). I dunno.
-	int brakeDelay = limit(0, 250, turnData.waitAtEnd);
+	setDrivePower(turnData.drive, -turnData.direction * 10, turnData.direction * 10);
+	int brakeDelay = limit(0, 100, turnData.waitAtEnd);
 	wait1Msec(brakeDelay);
 	setDrivePower(turnData.drive, 0, 0);
 
@@ -60,28 +61,37 @@ void turnEnd() {
 }
 
 task turnTask() {
-	while (!turnIsComplete()) { EndTimeSlice(); }
+	while (!turnIsComplete()) {
+		turnRuntime();
+		EndTimeSlice();
+	}
 	turnEnd();
 }
 
-void turn(parallel_drive &drive, float degreesToTurn, int power=50, bool runAsTask=false, int waitAtEnd=250) {
+void turn(parallel_drive &drive, float degreesToTurn, bool runAsTask=false, int waitAtEnd=100, float coeff=-115, float exponent=1) {
 	if (drive.hasGyro) {
 		//initialize variables
 		turnData.drive = drive;
-		turnData.degreesToTurn = degreesToTurn * 10; //gyro outputs are in degrees*10
-		turnData.power = power;
-		turnData.waitAtEnd = (waitAtEnd>250 ? waitAtEnd-250 : 0);
+		turnData.degreesToTurn = abs(degreesToTurn * 10); //gyro outputs are in degrees*10
+		turnData.waitAtEnd = (waitAtEnd>100 ? waitAtEnd-100 : 0);
+		turnData.exponent = exponent;
 		turnData.isTurning = true;
 		turnData.direction = sgn(degreesToTurn)
 
-		gyroVal(turnData.drive) = 0; //clear the gyro
-		setDrivePower(turnData.drive, turnData.direction*turnData.power, -turnData.direction*turnData.power); //begin turn
+		//set coefficient
+		if (coeff < 0) {
+			turnData.coeff = -coeff * pow(2/turnData.degreesToTurn, exponent+1); //solve for coefficient which produces specified maximum motor value
+		} else {
+			turnData.coeff = coeff;
+		}
+
+		clearGyro(turnData.drive);
 
 		if (runAsTask) {
 			startTask(turnTask);
 		}
 		else {
-			while (!turnIsComplete()) { EndTimeSlice(); }
+			while (!turnIsComplete()) { turnRuntime(); }
 			turnEnd();
 		}
 	}
