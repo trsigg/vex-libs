@@ -58,7 +58,7 @@ float PID_runtime(PID &pid) {
 	if (pid.inputUpdated && elapsed > pid.minSampleTime) {
 		float error = pid.target - *(pid.input);
 
-		pid.integral += (integralMin==NULL || error>integralMin) && (integralMax==NULL || error>integralMax) ? (error + pid.lastError)*elapsed/2 : 0; //update integral if within bounds of integralMin and integralMax
+		pid.integral += (pid.integralMin==NULL || error>pid.integralMin) && (pid.integralMax==NULL || error>pid.integralMax) ? (error + pid.lastError)*elapsed/2 : 0; //update integral if within bounds of integralMin and integralMax
 
 		pid.output = kP*error + kI*pid.integral + kD*(error - pid.lastError)/elapsed;
 		pid.lastError = error;
