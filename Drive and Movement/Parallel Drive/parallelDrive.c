@@ -2,7 +2,7 @@
 /////////////////  INSTRUCTIONS  /////////////////
 
 
-	1. Save this file in the same directory as your code
+	1. Save this file and coreIncludes.c in the same directory as your code
 
 	2. Include this line near the top of your code:
 			| #include "parallelDrive.c"
@@ -38,6 +38,8 @@
 
 	10. To clear a sensor, call clearEncoders(driveName), clearLeft(driveName), clearRight(driveName), or clearGyro(driveName)
 */
+
+#include "coreIncludes.c"
 
 enum encoderConfig { NONE, LEFT, RIGHT, AVERAGE };
 
@@ -208,7 +210,7 @@ void setDrivePower (parallel_drive &drive, int left, int right) {
 
 
 void setDriveSide(parallel_drive &drive, bool leftSide) {
-	int drivePower = 127 * drive.powerCoeff * exp(drive.powMap * log(vexRT[ leftSide ? drive.leftInput : drive.rightInput ] / 127)); //adjust input using powMap and powerCoeff
+	int drivePower = 127 * drive.powerCoeff * pow(vexRT[leftSide ? drive.leftInput : drive.rightInput]/127, drive.powMap); //adjust input using powMap and powerCoeff
 
 	if (abs(drivePower) < drive.deadband) drivePower = 0;
 
