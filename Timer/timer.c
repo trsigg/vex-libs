@@ -19,7 +19,7 @@
 */
 
 long resetTimer() {
-	return nPgmTime
+	return nPgmTime;
 }
 
 int time(long timer) {

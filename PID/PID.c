@@ -33,7 +33,7 @@ typedef union {
 		//internal variables
 		long lastUpdated;
 		float integral;
-		float prevError; 
+		float prevError;
 	};
 } PID;
 
@@ -58,10 +58,10 @@ float PID_runtime(PID &pid) {
 	if (pid.inputUpdated && elapsed > pid.minSampleTime) {
 		float error = pid.target - *(pid.input);
 
-		pid.integral += (pid.integralMin==NULL || error>pid.integralMin) && (pid.integralMax==NULL || error>pid.integralMax) ? (error + pid.lastError)*elapsed/2 : 0; //update integral if within bounds of integralMin and integralMax
+		pid.integral += (pid.integralMin==NULL || error>pid.integralMin) && (pid.integralMax==NULL || error>pid.integralMax) ? (error + pid.prevError)*elapsed/2 : 0; //update integral if within bounds of integralMin and integralMax
 
-		pid.output = kP*error + kI*pid.integral + kD*(error - pid.lastError)/elapsed;
-		pid.lastError = error;
+		pid.output = pid.kP*error + pid.kI*pid.integral + pid.kD*(error - pid.prevError)/elapsed;
+		pid.prevError = error;
 	}
 
 	return pid.output;

@@ -30,7 +30,7 @@
 
 	6. To explicitly set drive power, use setDrivePower(driveName, leftPower, rightPower), setRightPower(driveName, power), or setLeftPower(driveName, power)
 
-	7. To attach sensors, call attachGyro(driveName, gyro), attachEncoderL(driveName, leftEncoder), or attachEncoderR(driveName, rightEncoder), where gyro, leftEncoder, and rightEncoder are the names assigned in sensor setup 
+	7. To attach sensors, call attachGyro(driveName, gyro), attachEncoderL(driveName, leftEncoder), or attachEncoderR(driveName, rightEncoder), where gyro, leftEncoder, and rightEncoder are the names assigned in sensor setup
 
 	8. To explicitly control how encoders are used for distance measurement, call setEncoderConfig(driveName, config) where config is NONE, LEFT, RIGHT, or AVERAGE
 
@@ -110,7 +110,7 @@ void attachEncoderL(parallel_drive &drive, tSensors encoder) {
 }
 
 void attachEncoderR(parallel_drive &drive, tSensors encoder) {
-	drive.righttEncoder = encoder;
+	drive.rightEncoder = encoder;
 	drive.hasEncoderR = true;
 	updateEncoderConfig(drive);
 }
@@ -235,9 +235,9 @@ void setDriveSide(parallel_drive &drive, bool leftSide) {
 
 	//set drive motor power
 	if (leftSide) {
-		setLeftPower(drivePower);
+		setLeftPower(drive, drivePower);
 	} else {
-		setRightPower(drivePower);
+		setRightPower(drive, drivePower);
 	}
 }
 

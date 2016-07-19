@@ -29,7 +29,7 @@
 
 //turning region
 struct turnData {
-	parallel_drive *drive;
+	struct parallel_drive *drive;
 	int degreesToTurn; //positive for clockwise, negative for counterclockwise
 	int waitAtEnd; //delay after finishing turn (default 100ms for braking)
 	float coeff; //coefficient in ramping equation. Use a negative input to have it autocalculated based on a motor power value instead (it will be set to a value such that the maximum motor power during the turn is the value provided)
@@ -39,14 +39,13 @@ struct turnData {
 };
 
 bool turnIsComplete() {
-	return abs(gyroVal(turnData.drive)) >= abs(turnData.degreesToTurn) //might need to be &turnData.drive. I dunno.
 }
 
 void turnRuntime() {
 	int gyro = abs(gyroVal(turnData.drive));
 	int power = turnData.coeff * gyro * pow(turnData.degreesToTurn - gyro, turnData.exponent);
 
-	setDrivePower(turnData.drive, direction * power, -direction * power);
+	setDrivePower(turnData.drive, turnData.direction * power, -direction * power);
 }
 
 void turnEnd() {
@@ -76,7 +75,7 @@ void turn(parallel_drive &drive, float degreesToTurn, bool runAsTask=false, int 
 		turnData.waitAtEnd = (waitAtEnd>100 ? waitAtEnd-100 : 0);
 		turnData.exponent = exponent;
 		turnData.isTurning = true;
-		turnData.direction = sgn(degreesToTurn)
+		turnData.direction = sgn(degreesToTurn);
 
 		//set coefficient
 		if (coeff < 0) {
@@ -122,7 +121,7 @@ struct driveData {
 };
 
 bool drivingComplete() {
-	return abs(driveData.totalClicks)<driveData.clicks  && time(driveData.timer)<driveData.timeout
+	return abs(driveData.totalClicks)<driveData.clicks  && time(driveData.timer)<driveData.timeout;
 }
 
 void driveStraightRuntime() {
