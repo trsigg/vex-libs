@@ -100,7 +100,7 @@ void turn(parallel_drive &drive, float degreesToTurn, bool runAsTask=false, int 
 
 
 //driveStraight region
-enum correctionType { NONE, GYRO, ENCODER, AUTO };
+typedef enum correctionType { NONE, GYRO, ENCODER, AUTO };
 
 struct driveData {
 	parallel_drive *drive;
