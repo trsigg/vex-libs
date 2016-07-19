@@ -41,7 +41,7 @@
 
 #include "coreIncludes.c"
 
-enum encoderConfig { NONE, LEFT, RIGHT, AVERAGE };
+typedef enum encoderConfig { NONE, LEFT, RIGHT, AVERAGE };
 
 typedef union {
 	struct {
@@ -210,7 +210,7 @@ void setDrivePower (parallel_drive &drive, int left, int right) {
 
 
 void setDriveSide(parallel_drive &drive, bool leftSide) {
-	int drivePower = 127 * drive.powerCoeff * pow(vexRT[leftSide ? drive.leftInput : drive.rightInput]/127, drive.powMap); //adjust input using powMap and powerCoeff
+	int drivePower = 127 * drive.powerCoeff * power(vexRT[leftSide ? drive.leftInput : drive.rightInput]/127, drive.powMap); //adjust input using powMap and powerCoeff
 
 	if (abs(drivePower) < drive.deadband) drivePower = 0;
 

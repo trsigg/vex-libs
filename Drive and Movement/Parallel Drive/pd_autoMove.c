@@ -39,6 +39,7 @@ struct turnData {
 };
 
 bool turnIsComplete() {
+	return abs(gyroVal(turnData.drive)) >= abs(turnData.degreesToTurn); //might need to be &turnData.drive. I dunno.
 }
 
 void turnRuntime() {
