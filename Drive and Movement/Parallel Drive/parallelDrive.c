@@ -16,8 +16,8 @@
 	   numLeftMotors and numRightMotors are the number of motors on that side of the drive (Maximum of 6)
 	   Motor names (right1, right2, left1, left2, etc...) should correspond to the names assigned in motor setup.
 	   The optional arguments of initializeDrive can be used to further configure the drive
-	   	e.g. a user creating a drive with ramping and quadratic input mapping would substitute the second line of code with:
-	   	| initializeDrive(driveName, true, 20, 10, 2);
+	   	e.g. a user creating a drive with an initial position of (5, 0.5, 0), ramping, and quadratic input mapping would substitute the second line of code with:
+	   	| initializeDrive(driveName, 5, 0.5, 0, true, 20, 10, 2);
 
 	4. Whenever the drive should be updated (probably once every input cycle) include the following line of code
 			| driveRuntime(driveName)
@@ -40,11 +40,18 @@
 typedef enum encoderConfig { NONE, LEFT, RIGHT, AVERAGE };
 
 typedef struct {
+	float x;
+	float y;
+	float theta;
+} robotPosition;
+
+typedef struct {
 		bool isRamped; //whether drive is ramped
 		int msPerPowerChange; //if ramping, time between motor power changes, calculated using maxAcc100ms
 		int deadband; //range of motor values around 0 for which motors are not engaged
 		float powMap; //degree of polynomial to which inputs are mapped (1 for linear)
 		float powerCoeff; //factor by which motor speeds are multiplied
+		robotPosition position; //(x, y) coordinates and orientation of robot
 		TVexJoysticks leftInput; //id of remote channel used to calculate power of left side of drive (usually Ch3)
 		TVexJoysticks rightInput; //id of remote channel used to calculate power of right side of drive (usually Ch2)
 		//internal variables
@@ -61,13 +68,21 @@ typedef struct {
 } parallel_drive;
 
 
-void initializeDrive(parallel_drive &drive, bool isRamped=false, int maxAcc100ms=20, int deadband=10, float powMap=1, float powerCoeff=1, TVexJoysticks leftInput=Ch3, TVexJoysticks rightInput=Ch2) {
+void setRobotPosition(parallel_drive &drive, float x, float y, float theta) {
+	drive.position.x = x;
+	drive.position.y = y;
+	drive.position.theta = theta;
+}
+
+
+void initializeDrive(parallel_drive &drive, float initialX=0, float initialY=0, float initialTheta=PI/2, bool isRamped=false, int maxAcc100ms=20, int deadband=10, float powMap=1, float powerCoeff=1, TVexJoysticks leftInput=Ch3, TVexJoysticks rightInput=Ch2) {
 	//initialize drive variables
 	drive.isRamped = isRamped;
 	drive.msPerPowerChange = 100 / maxAcc100ms;
 	drive.deadband = deadband;
 	drive.powMap = powMap;
 	drive.powerCoeff = powerCoeff;
+	setRobotPosition(drive, initialX, initialY, initialTheta);
 	drive.leftInput = leftInput;
 	drive.rightInput = rightInput;
 	drive.lastUpdatedLeft = nPgmTime;
@@ -225,6 +240,8 @@ void setDrivePower (parallel_drive &drive, int left, int right) {
 }
 //end set drive power region
 
+//runtime functions region
+
 
 void setDriveSide(parallel_drive &drive, bool leftSide) {
 	int input = vexRT[leftSide ? drive.leftInput : drive.rightInput];
@@ -263,3 +280,4 @@ void driveRuntime(parallel_drive &drive) {
 	setDriveSide(drive, true);
 	setDriveSide(drive, false);
 }
+//end runtime functions region
