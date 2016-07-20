@@ -7,6 +7,6 @@ int limit(int input, int min, int max) {
 	}
 }
 
-float pow(float base, float power) {
+float power(float base, float power) {
 	return exp( power * log(base) );
 }

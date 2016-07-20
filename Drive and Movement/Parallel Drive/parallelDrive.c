@@ -7,36 +7,30 @@
 	2. Include this line near the top of your code:
 			| #include "parallelDrive.c"
 
-	3. Change #define statements below to the number of motor ports used by each side of the drive */
-
-#define numLeftMotors 2
-#define numRightMotors 2
-
-/*	4. To create drive, include the following lines in your code:
+	3. To create drive, include the following lines in your code:
 			| parallel_drive driveName;
-			| tMotor leftMotors[3] = {left1, left2, left3};
-			| tMotor rightMotors[3] = {right1, right2, right3};
-			| initializeDrive(driveName, &(leftMotors[0]), &(rightMotors[0]));
+			| initializeDrive(driveName);
+			| setLeftMotors(driveName, left1, left2, left3, etc.);
+			| setRightMotors(driveName, right1, right2, right3, etc.);
 	   Any valid variable name can be substituted for driveName
-	   Motor names (right1, right2, left1, left2, etc...) should correspond to the names assigned in motor setup
-	   The number in brackets after rightMotors and leftMotors should correspond to the number of motor ports used on that side of the drive and the numbers changed in step 3
+	   Motor names (right1, right2, left1, left2, etc...) should correspond to the names assigned in motor setup. A maximum of six motors can be assigned to a side, but if that's a problem you're doing something wrong.
 	   The optional arguments of initializeDrive can be used to further configure the drive
-	   	e.g. a user creating a drive with ramping and quadratic input mapping would substitute the fourth line of code with:
-	   	| initializeDrive(driveName, &(leftMotors[0]), &(rightMotors[0]), true, 20, 10, 2);
+	   	e.g. a user creating a drive with ramping and quadratic input mapping would substitute the second line of code with:
+	   	| initializeDrive(driveName, true, 20, 10, 2);
 
-	5. Whenever the drive should be updated (probably once every input cycle) include the following line of code
+	4. Whenever the drive should be updated (probably once every input cycle) include the following line of code
 			| driveRuntime(driveName)
 	   Where driveName is the same as in the previous step
 
-	6. To explicitly set drive power, use setDrivePower(driveName, leftPower, rightPower), setRightPower(driveName, power), or setLeftPower(driveName, power)
+	5. To explicitly set drive power, use setDrivePower(driveName, leftPower, rightPower), setRightPower(driveName, power), or setLeftPower(driveName, power)
 
-	7. To attach sensors, call attachGyro(driveName, gyro), attachEncoderL(driveName, leftEncoder), or attachEncoderR(driveName, rightEncoder), where gyro, leftEncoder, and rightEncoder are the names assigned in sensor setup
+	6. To attach sensors, call attachGyro(driveName, gyro), attachEncoderL(driveName, leftEncoder), or attachEncoderR(driveName, rightEncoder), where gyro, leftEncoder, and rightEncoder are the names assigned in sensor setup
 
-	8. To explicitly control how encoders are used for distance measurement, call setEncoderConfig(driveName, config) where config is NONE, LEFT, RIGHT, or AVERAGE
+	7. To explicitly control how encoders are used for distance measurement, call setEncoderConfig(driveName, config) where config is NONE, LEFT, RIGHT, or AVERAGE
 
-	9. To access a sensor value, call encoderVal(driveName), encoderVal_L(driveName), encoderVal_R(driveName), or gyroVal(driveName)
+	8. To access a sensor value, call encoderVal(driveName), encoderVal_L(driveName), encoderVal_R(driveName), or gyroVal(driveName)
 
-	10. To clear a sensor, call clearEncoders(driveName), clearLeft(driveName), clearRight(driveName), or clearGyro(driveName)
+	9. To clear a sensor, call clearEncoders(driveName), clearLeft(driveName), clearRight(driveName), or clearGyro(driveName)
 */
 
 #include "coreIncludes.c"
@@ -52,9 +46,9 @@ typedef union {
 		float powerCoeff; //factor by which motor speeds are multiplied
 		TVexJoysticks leftInput; //id of remote channel used to calculate power of left side of drive (usually Ch3)
 		TVexJoysticks rightInput; //id of remote channel used to calculate power of right side of drive (usually Ch2)
-		//internal variables for ramping
-		long lastUpdatedLeft;
-		long lastUpdatedRight;
+		//internal variables
+		long lastUpdatedLeft, lastUpdatedRight; //for ramping
+		int numLeftMotors, numRightMotors;
 		//associated sensors
 		encoderConfig encoderConfig;
 		bool hasGyro, hasEncoderL, hasEncoderR;
@@ -62,12 +56,12 @@ typedef union {
 	};
 
 	//motor ports used for drive
-	tMotor rightMotors[numRightMotors];
-	tMotor leftMotors[numLeftMotors];
+	tMotor rightMotors[6];
+	tMotor leftMotors[6];
 } parallel_drive;
 
 
-void initializeDrive(parallel_drive &drive, tMotor *leftMotorsPtr, tMotor *rightMotorsPtr, bool isRamped=false, int maxAcc100ms=20, int deadband=10, float powMap=1, float powerCoeff=1, TVexJoysticks leftInput=Ch3, TVexJoysticks rightInput=Ch2) {
+void initializeDrive(parallel_drive &drive, bool isRamped=false, int maxAcc100ms=20, int deadband=10, float powMap=1, float powerCoeff=1, TVexJoysticks leftInput=Ch3, TVexJoysticks rightInput=Ch2) {
 	//initialize drive variables
 	drive.isRamped = isRamped;
 	drive.msPerPowerChange = 100 / maxAcc100ms;
@@ -78,14 +72,55 @@ void initializeDrive(parallel_drive &drive, tMotor *leftMotorsPtr, tMotor *right
 	drive.rightInput = rightInput;
 	drive.lastUpdatedLeft = nPgmTime;
 	drive.lastUpdatedRight = nPgmTime;
+}
 
-	//arrays are stupid in robotc so I have to do this
-	for (int i=0; i<numLeftMotors; i++) { //copy motors into drive.leftMotors
-		drive.leftMotors[i] = *(leftMotorsPtr + i); //TODO: multipy i by the size of a tMotor (could be resolved by passing motor arrays as tMotor &motorArray?)
+void attachMotor(parallel_drive &drive, tMotor motor, bool left) {
+	if (left) {
+		if (numLeftMotors <= 6) {
+			drive.numLeftMotors++
+			drive.leftMotors[numLeftMotors] = motor;
+		}
+	} else if (numRightMotors <= 6) {
+		drive.numRightMotors++
+		drive.rightMotors[numRightMotors] = motor;
 	}
+}
 
-	for (int i=0; i<numRightMotors; i++) { //copy motors into drive.rightMotors
-		drive.rightMotors[i] = *(rightMotorsPtr + i);
+void setLeftMotors(parallel_drive &drive, tMotor motor1, tMotor motor2=NULL, tMotor motor3=NULL, tMotor motor4=NULL, tMotor motor5=NULL, tMotor motor6=NULL) { //look, I know this is stupid.  But arrays in ROBOTC */really/* suck
+	attachMotor(drive, motor1, true);
+	if (motor2) {
+		attachMotor(drive, motor2, true);
+		if (motor3) {
+			attachMotor(drive, motor3, true);
+			if (motor4) {
+				attachMotor(drive, motor4, true);
+				if (motor5) {
+					attachMotor(drive, motor6, true);
+					if (motor6) {
+						attachMotor(drive, motor6, true);
+					}
+				}
+			}
+		}
+	}
+}
+
+void setLeftMotors(parallel_drive &drive, tMotor motor1, tMotor motor2=NULL, tMotor motor3=NULL, tMotor motor4=NULL, tMotor motor5=NULL, tMotor motor6=NULL) { //look, I know this is stupid.  But arrays in ROBOTC */really/* suck
+	attachMotor(drive, motor1, false);
+	if (motor2) {
+		attachMotor(drive, motor2, false);
+		if (motor3) {
+			attachMotor(drive, motor3, false);
+			if (motor4) {
+				attachMotor(drive, motor4, false);
+				if (motor5) {
+					attachMotor(drive, motor6, false);
+					if (motor6) {
+						attachMotor(drive, motor6, false);
+					}
+				}
+			}
+		}
 	}
 }
 
