@@ -10,10 +10,11 @@
 	3. To create drive, include the following lines in your code:
 			| parallel_drive driveName;
 			| initializeDrive(driveName);
-			| setLeftMotors(driveName, left1, left2, left3, etc.);
-			| setRightMotors(driveName, right1, right2, right3, etc.);
+			| setLeftMotors(driveName, numLeftMotors, left1, left2, left3, etc.);
+			| setRightMotors(driveName, numRightMotors, right1, right2, right3, etc.);
 	   Any valid variable name can be substituted for driveName
-	   Motor names (right1, right2, left1, left2, etc...) should correspond to the names assigned in motor setup. A maximum of six motors can be assigned to a side, but if that's a problem you're doing something wrong.
+	   numLeftMotors and numRightMotors are the number of motors on that side of the drive (Maximum of 6)
+	   Motor names (right1, right2, left1, left2, etc...) should correspond to the names assigned in motor setup.
 	   The optional arguments of initializeDrive can be used to further configure the drive
 	   	e.g. a user creating a drive with ramping and quadratic input mapping would substitute the second line of code with:
 	   	| initializeDrive(driveName, true, 20, 10, 2);
@@ -37,8 +38,7 @@
 
 typedef enum encoderConfig { NONE, LEFT, RIGHT, AVERAGE };
 
-typedef union {
-	struct {
+typedef struct {
 		bool isRamped; //whether drive is ramped
 		int msPerPowerChange; //if ramping, time between motor power changes, calculated using maxAcc100ms
 		int deadband; //range of motor values around 0 for which motors are not engaged
@@ -49,15 +49,13 @@ typedef union {
 		//internal variables
 		long lastUpdatedLeft, lastUpdatedRight; //for ramping
 		int numLeftMotors, numRightMotors;
+		//motor ports used for drive
+		tMotor rightMotors[6];
+		tMotor leftMotors[6];
 		//associated sensors
 		encoderConfig encoderConfig;
 		bool hasGyro, hasEncoderL, hasEncoderR;
 		tSensors gyro, leftEncoder, rightEncoder;
-	};
-
-	//motor ports used for drive
-	tMotor rightMotors[6];
-	tMotor leftMotors[6];
 } parallel_drive;
 
 
@@ -72,55 +70,35 @@ void initializeDrive(parallel_drive &drive, bool isRamped=false, int maxAcc100ms
 	drive.rightInput = rightInput;
 	drive.lastUpdatedLeft = nPgmTime;
 	drive.lastUpdatedRight = nPgmTime;
+	drive.numLeftMotors = 0;
+	drive.numRightMotors = 0;
 }
 
 void attachMotor(parallel_drive &drive, tMotor motor, bool left) {
 	if (left) {
-		if (numLeftMotors <= 6) {
-			drive.numLeftMotors++
-			drive.leftMotors[numLeftMotors] = motor;
+		if (drive.numLeftMotors <= 5) {
+			drive.leftMotors[drive.numLeftMotors] = motor;
+			drive.numLeftMotors++;
 		}
-	} else if (numRightMotors <= 6) {
-		drive.numRightMotors++
-		drive.rightMotors[numRightMotors] = motor;
+	} else if (drive.numRightMotors <= 5) {
+		drive.rightMotors[drive.numRightMotors] = motor;
+		drive.numRightMotors++;
 	}
 }
 
-void setLeftMotors(parallel_drive &drive, tMotor motor1, tMotor motor2=NULL, tMotor motor3=NULL, tMotor motor4=NULL, tMotor motor5=NULL, tMotor motor6=NULL) { //look, I know this is stupid.  But arrays in ROBOTC */really/* suck
-	attachMotor(drive, motor1, true);
-	if (motor2) {
-		attachMotor(drive, motor2, true);
-		if (motor3) {
-			attachMotor(drive, motor3, true);
-			if (motor4) {
-				attachMotor(drive, motor4, true);
-				if (motor5) {
-					attachMotor(drive, motor6, true);
-					if (motor6) {
-						attachMotor(drive, motor6, true);
-					}
-				}
-			}
-		}
+void setLeftMotors(parallel_drive &drive, int numMotors, tMotor motor1, tMotor motor2=port1, tMotor motor3=port1, tMotor motor4=port1, tMotor motor5=port1, tMotor motor6=port1) { //look, I know this is stupid.  But arrays in ROBOTC */really/* suck
+	tMotor motors[6] = {motor1, motor2, motor3, motor4, motor5, motor6};
+
+	for (int i=0; i<numMotors; i++) {
+		attachMotor(drive, motors[i], true);
 	}
 }
 
-void setLeftMotors(parallel_drive &drive, tMotor motor1, tMotor motor2=NULL, tMotor motor3=NULL, tMotor motor4=NULL, tMotor motor5=NULL, tMotor motor6=NULL) { //look, I know this is stupid.  But arrays in ROBOTC */really/* suck
-	attachMotor(drive, motor1, false);
-	if (motor2) {
-		attachMotor(drive, motor2, false);
-		if (motor3) {
-			attachMotor(drive, motor3, false);
-			if (motor4) {
-				attachMotor(drive, motor4, false);
-				if (motor5) {
-					attachMotor(drive, motor6, false);
-					if (motor6) {
-						attachMotor(drive, motor6, false);
-					}
-				}
-			}
-		}
+void setRightMotors(parallel_drive &drive, int numMotors, tMotor motor1, tMotor motor2=port1, tMotor motor3=port1, tMotor motor4=port1, tMotor motor5=port1, tMotor motor6=port1) { //look, I know this is stupid.  But arrays in ROBOTC */really/* suck
+	tMotor motors[6] = {motor1, motor2, motor3, motor4, motor5, motor6};
+
+	for (int i=0; i<numMotors; i++) {
+		attachMotor(drive, motors[i], false);
 	}
 }
 
@@ -226,13 +204,13 @@ void clearGyro(parallel_drive &drive) {
 
 //set drive power region
 void setLeftPower (parallel_drive &drive, int power) {
-	for (int i=0; i<numLeftMotors; i++) {
+	for (int i=0; i<drive.numLeftMotors; i++) {
 		motor[ drive.leftMotors[i] ] = power;
 	}
 }
 
 void setRightPower (parallel_drive &drive, int power) {
-	for (int i=0; i<numRightMotors; i++) {
+	for (int i=0; i<drive.numRightMotors; i++) {
 		motor[ drive.rightMotors[i] ] = power;
 	}
 }
@@ -245,7 +223,8 @@ void setDrivePower (parallel_drive &drive, int left, int right) {
 
 
 void setDriveSide(parallel_drive &drive, bool leftSide) {
-	int drivePower = 127 * drive.powerCoeff * power(vexRT[leftSide ? drive.leftInput : drive.rightInput]/127, drive.powMap); //adjust input using powMap and powerCoeff
+	int input = vexRT[leftSide ? drive.leftInput : drive.rightInput];
+	int drivePower = sgn(input) * drive.powerCoeff * power(input, drive.powMap) / power(127, drive.powMap-1); //adjust input using powMap and powerCoeff
 
 	if (abs(drivePower) < drive.deadband) drivePower = 0;
 

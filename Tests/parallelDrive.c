@@ -38,8 +38,7 @@
 
 typedef enum encoderConfig { NONE, LEFT, RIGHT, AVERAGE };
 
-typedef union {
-	struct {
+typedef struct {
 		bool isRamped; //whether drive is ramped
 		int msPerPowerChange; //if ramping, time between motor power changes, calculated using maxAcc100ms
 		int deadband; //range of motor values around 0 for which motors are not engaged
@@ -50,15 +49,13 @@ typedef union {
 		//internal variables
 		long lastUpdatedLeft, lastUpdatedRight; //for ramping
 		int numLeftMotors, numRightMotors;
+		//motor ports used for drive
+		tMotor rightMotors[6];
+		tMotor leftMotors[6];
 		//associated sensors
 		encoderConfig encoderConfig;
 		bool hasGyro, hasEncoderL, hasEncoderR;
 		tSensors gyro, leftEncoder, rightEncoder;
-	};
-
-	//motor ports used for drive
-	tMotor rightMotors[6];
-	tMotor leftMotors[6];
 } parallel_drive;
 
 
@@ -79,13 +76,13 @@ void initializeDrive(parallel_drive &drive, bool isRamped=false, int maxAcc100ms
 
 void attachMotor(parallel_drive &drive, tMotor motor, bool left) {
 	if (left) {
-		if (drive.numLeftMotors <= 6) {
-			drive.numLeftMotors++;
+		if (drive.numLeftMotors <= 5) {
 			drive.leftMotors[drive.numLeftMotors] = motor;
+			drive.numLeftMotors++;
 		}
-	} else if (drive.numRightMotors <= 6) {
-		drive.numRightMotors++;
+	} else if (drive.numRightMotors <= 5) {
 		drive.rightMotors[drive.numRightMotors] = motor;
+		drive.numRightMotors++;
 	}
 }
 
@@ -226,7 +223,8 @@ void setDrivePower (parallel_drive &drive, int left, int right) {
 
 
 void setDriveSide(parallel_drive &drive, bool leftSide) {
-	int drivePower = 127 * drive.powerCoeff * power(vexRT[leftSide ? drive.leftInput : drive.rightInput]/127, drive.powMap); //adjust input using powMap and powerCoeff
+	int input = vexRT[leftSide ? drive.leftInput : drive.rightInput];
+	int drivePower = sgn(input) * drive.powerCoeff * power(input, drive.powMap) / power(127, drive.powMap-1); //adjust input using powMap and powerCoeff
 
 	if (abs(drivePower) < drive.deadband) drivePower = 0;
 

@@ -8,5 +8,5 @@ int limit(int input, int min, int max) {
 }
 
 float power(float base, float power) {
-	return exp( power * log(base) );
+	return exp( power * log(abs(base)) );
 }
