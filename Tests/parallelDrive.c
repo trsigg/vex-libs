@@ -2,7 +2,7 @@
 /////////////////  INSTRUCTIONS  /////////////////
 
 
-	1. Save this file and coreIncludes.c in the same directory as your code
+	1. Save this file, timer.c, and coreIncludes.c in the same directory as your code
 
 	2. Include this line near the top of your code:
 			| #include "parallelDrive.c"
@@ -20,8 +20,8 @@
 	   	| initializeDrive(driveName, true, 20, 10, 2);
 
 	4. Whenever the drive should be updated (probably once every input cycle) include the following line of code
-			| driveRuntime(driveName)
-	   Where driveName is the same as in the previous step
+			| driveRuntime(driveName);
+		Where driveName is the same as in the previous step
 
 	5. To explicitly set drive power, use setDrivePower(driveName, leftPower, rightPower), setRightPower(driveName, power), or setLeftPower(driveName, power)
 
@@ -30,14 +30,28 @@
 
 	7. To explicitly control how encoders are used for distance measurement, call setEncoderConfig(driveName, config) where config is NONE, LEFT, RIGHT, or AVERAGE
 
-	8. To access a sensor value, call encoderVal(driveName), encoderVal_L(driveName), encoderVal_R(driveName), or gyroVal(driveName). Encoder values are converted into distance ones.
+	8. To access a sensor value, call encoderVal(driveName), encoderVal_L(driveName), encoderVal_R(driveName), or gyroVal(driveName).
+		Encoder values are converted into distance ones unless optional rawValue argument is set to true.
 
 	9. To clear a sensor, call clearEncoders(driveName), clearLeft(driveName), clearRight(driveName), or clearGyro(driveName)
+
+	10.To set the robot's position, call setRobotPosition(driveName, x, y, theta);
+
+	11.To have the robot's position automatically updated (very experimental feature), include the following line of code in the main loop
+			| updatePosition(driveName);
+		This function returns a robotPosition object.
 */
 
 #include "coreIncludes.c"
+#include "timer.c"
 
 typedef enum encoderConfig { NONE, LEFT, RIGHT, AVERAGE };
+
+typedef struct {
+	float x;
+	float y;
+	float theta;
+} robotPosition;
 
 typedef struct {
 		bool isRamped; //whether drive is ramped
@@ -45,10 +59,14 @@ typedef struct {
 		int deadband; //range of motor values around 0 for which motors are not engaged
 		float powMap; //degree of polynomial to which inputs are mapped (1 for linear)
 		float powerCoeff; //factor by which motor speeds are multiplied
+		robotPosition position; //(x, y) coordinates and orientation of robot
+		float width; //width of drive in inches (wheel well to wheel well). Used to track position.
+		int minSampleTime; //minimum wait before updating robot position
 		TVexJoysticks leftInput; //id of remote channel used to calculate power of left side of drive (usually Ch3)
 		TVexJoysticks rightInput; //id of remote channel used to calculate power of right side of drive (usually Ch2)
 		//internal variables
-		long lastUpdatedLeft, lastUpdatedRight; //for ramping
+		long lastUpdatedLeft, lastUpdatedRight; //ramping
+		long posLastUpdated; //position tracking
 		int numLeftMotors, numRightMotors;
 		//motor ports used for drive
 		tMotor rightMotors[6];
@@ -61,17 +79,28 @@ typedef struct {
 } parallel_drive;
 
 
-void initializeDrive(parallel_drive &drive, bool isRamped=false, int maxAcc100ms=20, int deadband=10, float powMap=1, float powerCoeff=1, TVexJoysticks leftInput=Ch3, TVexJoysticks rightInput=Ch2) {
+void setRobotPosition(parallel_drive &drive, float x, float y, float theta) {
+	drive.position.x = x;
+	drive.position.y = y;
+	drive.position.theta = theta;
+}
+
+
+void initializeDrive(parallel_drive &drive, bool isRamped=false, int maxAcc100ms=20, int deadband=10, float powMap=1, float powerCoeff=1, float initialX=0, float initialY=0, float initialTheta=PI/2, float width=16, int minSampleTime=50, TVexJoysticks leftInput=Ch3, TVexJoysticks rightInput=Ch2) {
 	//initialize drive variables
 	drive.isRamped = isRamped;
 	drive.msPerPowerChange = 100 / maxAcc100ms;
 	drive.deadband = deadband;
 	drive.powMap = powMap;
 	drive.powerCoeff = powerCoeff;
+	setRobotPosition(drive, initialX, initialY, initialTheta);
+	drive.width = width;
+	drive.minSampleTime = minSampleTime;
 	drive.leftInput = leftInput;
 	drive.rightInput = rightInput;
 	drive.lastUpdatedLeft = nPgmTime;
 	drive.lastUpdatedRight = nPgmTime;
+	drive.posLastUpdated = resetTimer();
 	drive.numLeftMotors = 0;
 	drive.numRightMotors = 0;
 }
@@ -145,29 +174,29 @@ void setEncoderConfig(parallel_drive &drive, encoderConfig config) {
 
 
 //sensor access region
-int encoderVal_L(parallel_drive &drive) {
+float encoderVal_L(parallel_drive &drive, bool rawValue=false) {
 	if (drive.hasEncoderL) {
-		return SensorValue[drive.leftEncoder] * drive.leftEncCoeff;
+		return SensorValue[drive.leftEncoder] * (rawValue ? 1 : drive.leftEncCoeff);
 	} else {
 		return 0;
 	}
 }
 
-int encoderVal_R(parallel_drive &drive) {
+float encoderVal_R(parallel_drive &drive, bool rawValue=false) {
 	if (drive.hasEncoderR) {
-		return SensorValue[drive.rightEncoder] * drive.rightEncCoeff;
+		return SensorValue[drive.rightEncoder] * (rawValue ? 1 : drive.rightEncCoeff);
 	} else {
 		return 0;
 	}
 }
 
-int encoderVal(parallel_drive &drive) {
+float encoderVal(parallel_drive &drive, bool rawValue=false) {
 	if (drive.encoderConfig==AVERAGE) {
-		return (encoderVal_L(drive) + encoderVal_R(drive)) / 2;
+		return (encoderVal_L(drive, rawValue) + encoderVal_R(drive, rawValue)) / 2;
 	} else if (drive.encoderConfig==LEFT) {
-		return encoderVal_L(drive);
+		return encoderVal_L(drive, rawValue);
 	} else if (drive.encoderConfig==RIGHT) {
-		return encoderVal_R(drive);
+		return encoderVal_R(drive, rawValue);
 	}
 
 	return 0;
@@ -225,6 +254,31 @@ void setDrivePower (parallel_drive &drive, int left, int right) {
 }
 //end set drive power region
 
+//runtime functions region
+robotPosition *updatePosition(parallel_drive &drive) {
+	if (time(drive.posLastUpdated) >= drive.minSampleTime) {
+		float leftDist = encoderVal_L(drive);
+		float rightDist = encoderVal_R(drive);
+		clearEncoders(drive);
+
+		drive.posLastUpdated = resetTimer();
+
+		if (rightDist != leftDist) {
+			float r = drive.width / (rightDist/leftDist - 1);
+			float phi = (rightDist - leftDist) / drive.width;
+
+			drive.position.x += r * (sin(drive.position.theta) - sin(drive.position.theta + phi));
+			drive.position.y += r * (cos(drive.position.theta) - cos(drive.position.theta + phi));
+			drive.position.theta = PI - drive.position.theta - phi;
+		} else {
+			drive.position.x -= leftDist * sin(drive.position.theta);
+			drive.position.y += leftDist * cos(drive.position.theta);
+		}
+	}
+
+	return drive.position;
+}
+
 
 void setDriveSide(parallel_drive &drive, bool leftSide) {
 	int input = vexRT[leftSide ? drive.leftInput : drive.rightInput];
@@ -263,3 +317,4 @@ void driveRuntime(parallel_drive &drive) {
 	setDriveSide(drive, true);
 	setDriveSide(drive, false);
 }
+//end runtime functions region
