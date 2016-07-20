@@ -26,10 +26,11 @@
 	5. To explicitly set drive power, use setDrivePower(driveName, leftPower, rightPower), setRightPower(driveName, power), or setLeftPower(driveName, power)
 
 	6. To attach sensors, call attachGyro(driveName, gyro), attachEncoderL(driveName, leftEncoder), or attachEncoderR(driveName, rightEncoder), where gyro, leftEncoder, and rightEncoder are the names assigned in sensor setup
+		The attachEncoder functions also accept wheelDiameter and gearRatio arguments. These default to 3.25" and 1, and are used to convert encoder values to distance ones.
 
 	7. To explicitly control how encoders are used for distance measurement, call setEncoderConfig(driveName, config) where config is NONE, LEFT, RIGHT, or AVERAGE
 
-	8. To access a sensor value, call encoderVal(driveName), encoderVal_L(driveName), encoderVal_R(driveName), or gyroVal(driveName)
+	8. To access a sensor value, call encoderVal(driveName), encoderVal_L(driveName), encoderVal_R(driveName), or gyroVal(driveName). Encoder values are converted into distance ones.
 
 	9. To clear a sensor, call clearEncoders(driveName), clearLeft(driveName), clearRight(driveName), or clearGyro(driveName)
 */
@@ -55,6 +56,7 @@ typedef struct {
 		//associated sensors
 		encoderConfig encoderConfig;
 		bool hasGyro, hasEncoderL, hasEncoderR;
+		float leftEncCoeff, rightEncCoeff; //coefficients used to translate encoder values to distance traveled
 		tSensors gyro, leftEncoder, rightEncoder;
 } parallel_drive;
 
@@ -94,7 +96,7 @@ void setLeftMotors(parallel_drive &drive, int numMotors, tMotor motor1, tMotor m
 	}
 }
 
-void setRightMotors(parallel_drive &drive, int numMotors, tMotor motor1, tMotor motor2=port1, tMotor motor3=port1, tMotor motor4=port1, tMotor motor5=port1, tMotor motor6=port1) { //look, I know this is stupid.  But arrays in ROBOTC */really/* suck
+void setRightMotors(parallel_drive &drive, int numMotors, tMotor motor1, tMotor motor2=port1, tMotor motor3=port1, tMotor motor4=port1, tMotor motor5=port1, tMotor motor6=port1) {
 	tMotor motors[6] = {motor1, motor2, motor3, motor4, motor5, motor6};
 
 	for (int i=0; i<numMotors; i++) {
@@ -116,15 +118,17 @@ void updateEncoderConfig(parallel_drive &drive) {
 	}
 }
 
-void attachEncoderL(parallel_drive &drive, tSensors encoder) {
+void attachEncoderL(parallel_drive &drive, tSensors encoder, float wheelDiameter=3.25, float gearRatio=1) {
 	drive.leftEncoder = encoder;
 	drive.hasEncoderL = true;
+	drive.leftEncCoeff = PI * wheelDiameter * gearRatio / 90;
 	updateEncoderConfig(drive);
 }
 
-void attachEncoderR(parallel_drive &drive, tSensors encoder) {
+void attachEncoderR(parallel_drive &drive, tSensors encoder, float wheelDiameter=3.25, float gearRatio=1) {
 	drive.rightEncoder = encoder;
 	drive.hasEncoderR = true;
+	drive.rightEncCoeff = PI * wheelDiameter * gearRatio / 90;
 	updateEncoderConfig(drive);
 }
 
@@ -141,21 +145,9 @@ void setEncoderConfig(parallel_drive &drive, encoderConfig config) {
 
 
 //sensor access region
-int encoderVal(parallel_drive &drive) {
-	if (drive.encoderConfig==AVERAGE && drive.hasEncoderL && drive.hasEncoderR) {
-		return (SensorValue[drive.leftEncoder] + SensorValue[drive.rightEncoder]) / 2;
-	} else if (drive.encoderConfig==LEFT && drive.hasEncoderL) {
-		return SensorValue[drive.leftEncoder];
-	} else if (drive.encoderConfig==RIGHT && drive.hasEncoderR) {
-		return SensorValue[drive.rightEncoder];
-	}
-
-	return 0;
-}
-
 int encoderVal_L(parallel_drive &drive) {
 	if (drive.hasEncoderL) {
-		return SensorValue[drive.leftEncoder];
+		return SensorValue[drive.leftEncoder] * drive.leftEncCoeff;
 	} else {
 		return 0;
 	}
@@ -163,10 +155,22 @@ int encoderVal_L(parallel_drive &drive) {
 
 int encoderVal_R(parallel_drive &drive) {
 	if (drive.hasEncoderR) {
-		return SensorValue[drive.rightEncoder];
+		return SensorValue[drive.rightEncoder] * drive.rightEncCoeff;
 	} else {
 		return 0;
 	}
+}
+
+int encoderVal(parallel_drive &drive) {
+	if (drive.encoderConfig==AVERAGE) {
+		return (encoderVal_L(drive) + encoderVal_R(drive)) / 2;
+	} else if (drive.encoderConfig==LEFT) {
+		return encoderVal_L(drive);
+	} else if (drive.encoderConfig==RIGHT) {
+		return encoderVal_R(drive);
+	}
+
+	return 0;
 }
 
 void clearLeft(parallel_drive &drive) {
