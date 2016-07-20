@@ -9,11 +9,9 @@
 parallel_drive drive;
 
 task main() {
-	tMotor leftMotors[2] = {ld1, ld2};
-	tMotor rightMotors[2] = {rd1, rd2};
 	initializeDrive(drive);
-	drive.leftMotors = leftMotors;
-	drive.rightMotors = rightMotors;
+	setLeftMotors(drive, 2, ld1, ld2);
+	setRightMotors(drive, 2, rd1, rd2);
 
 	while (true) driveRuntime(drive);
 }
