@@ -32,9 +32,10 @@
 
 	8. To access a sensor value, call encoderVal(driveName), encoderVal_L(driveName), encoderVal_R(driveName), or gyroVal(driveName).
 		Encoder values are converted into distance ones unless optional rawValue argument is set to true.
-		The optional output argument accepts DEGREES, RADIANS, or RAW, and controls the output format of the function.
+		The optional angleType argument accepts DEGREES, RADIANS, or RAW, and controls the output format of the function.
 
-	9. To clear a sensor, call clearEncoders(driveName), clearLeft(driveName), clearRight(driveName), or clearGyro(driveName)
+	9. To reset a sensor, call resetEncoders(driveName), resetLeft(driveName), resetRight(driveName), or resetGyro(driveName)
+		To set a sensor to a value other than zero, use the optional resetVal argument. To specify the input format for the gyro, use the angleType argument.
 
 	10.To set the robot's position, call setRobotPosition(driveName, x, y, theta);
 
@@ -151,17 +152,17 @@ void updateEncoderConfig(parallel_drive &drive) {
 	}
 }
 
-void attachEncoderL(parallel_drive &drive, tSensors encoder, float wheelDiameter=3.25, float gearRatio=1) {
+void attachEncoderL(parallel_drive &drive, tSensors encoder, bool reversed=false, float wheelDiameter=3.25, float gearRatio=1) {
 	drive.leftEncoder = encoder;
 	drive.hasEncoderL = true;
-	drive.leftEncCoeff = PI * wheelDiameter * gearRatio / 360;
+	drive.leftEncCoeff = PI * wheelDiameter * gearRatio * (reversed ? -1 : 1) / 360;
 	updateEncoderConfig(drive);
 }
 
-void attachEncoderR(parallel_drive &drive, tSensors encoder, float wheelDiameter=3.25, float gearRatio=1) {
+void attachEncoderR(parallel_drive &drive, tSensors encoder, bool reversed=false, float wheelDiameter=3.25, float gearRatio=1) {
 	drive.rightEncoder = encoder;
 	drive.hasEncoderR = true;
-	drive.rightEncCoeff = PI * wheelDiameter * gearRatio / 360;
+	drive.rightEncCoeff = PI * wheelDiameter * gearRatio * (reversed ? -1 : 1) / 360;
 	updateEncoderConfig(drive);
 }
 
@@ -210,30 +211,30 @@ float encoderVal(parallel_drive &drive, bool rawValue=false, bool absolute=true)
 	return 0;
 }
 
-void clearLeft(parallel_drive &drive) {
+void resetLeft(parallel_drive &drive, int resetVal=0) {
 	if (drive.hasEncoderL) {
-		SensorValue[drive.leftEncoder] = 0;
+		SensorValue[drive.leftEncoder] = resetVal;
 	}
 }
 
-void clearRight(parallel_drive &drive) {
+void resetRight(parallel_drive &drive, int resetVal=0) {
 	if (drive.hasEncoderR) {
-		SensorValue[drive.rightEncoder] = 0;
+		SensorValue[drive.rightEncoder] = resetVal;
 	}
 }
 
-void clearEncoders(parallel_drive &drive) {
-	clearLeft(drive);
-	clearRight(drive);
+void resetEncoders(parallel_drive &drive, int resetVal=0) {
+	resetLeft(drive, resetVal);
+	resetRight(drive, resetVal);
 }
 
-enum gyroOutputType { DEGREES, RADIANS, RAW };
+enum angleType { DEGREES, RADIANS, RAW };
 
-float gyroVal(parallel_drive &drive, gyroOutputType output=DEGREES) {
+float gyroVal(parallel_drive &drive, angleType angleType=DEGREES) {
 	if (drive.hasGyro) {
-		if (output == DEGREES) {
+		if (angleType == DEGREES) {
 			return SensorValue[drive.gyro] / 10;
-		} else if (output == RADIANS) {
+		} else if (angleType == RADIANS) {
 			return SensorValue[drive.gyro] * PI / 1800;
 		} else {
 			return SensorValue[drive.gyro];
@@ -243,9 +244,22 @@ float gyroVal(parallel_drive &drive, gyroOutputType output=DEGREES) {
 	}
 }
 
-void clearGyro(parallel_drive &drive) {
+void resetGyro(parallel_drive &drive, float resetVal=0, angleType angleType=DEGREES) {
+	int debug = 0;
 	if (drive.hasGyro) {
-		SensorValue[drive.gyro] = 0;
+		debug = 1;
+		if (angleType == DEGREES) {
+			debug = 2;
+			SensorValue[drive.gyro] = (int)(resetVal * 10);
+			debug = (int)(resetVal * 10);
+			debug = 5;
+		} else if (angleType == RADIANS) {
+			debug = 3;
+			SensorValue[drive.gyro] = (int)(resetVal * 1800 / PI);
+		} else {
+			debug = 4;
+			SensorValue[drive.gyro] = (int)(resetVal);
+		}
 	}
 }
 //end sensor access region
@@ -284,8 +298,8 @@ float calculateWidth(parallel_drive &drive, int duration=10000, int sampleTime=2
 			timer = resetTimer();
 
 			while (time(timer) < (duration-reverseDelay)/2) {
-				clearEncoders(drive);
-				clearGyro(drive);
+				resetEncoders(drive);
+				resetGyro(drive);
 				wait1Msec(sampleTime);
 
 				totalWidth += encoderVal(drive) * 3600 / (PI * abs(gyroVal(drive, RAW)));
@@ -305,20 +319,20 @@ robotPosition *updatePosition(parallel_drive &drive) {
 	if (time(drive.posLastUpdated) >= drive.minSampleTime) {
 		float leftDist = encoderVal_L(drive);
 		float rightDist = encoderVal_R(drive);
-		clearEncoders(drive);
+		resetEncoders(drive);
 
 		drive.posLastUpdated = resetTimer();
 
-		if (rightDist != leftDist) {
-			float r = drive.width / (rightDist/leftDist - 1);
+		if (rightDist != leftDist && leftDist != 0) {
+			float r = drive.width/(rightDist/leftDist - 1.0) + drive.width/2;
 			float phi = (rightDist - leftDist) / drive.width;
 
-			drive.position.x += r * (sin(drive.position.theta) - sin(drive.position.theta + phi));
+			drive.position.x += r * (sin(drive.position.theta + phi) - sin(drive.position.theta));
 			drive.position.y += r * (cos(drive.position.theta) - cos(drive.position.theta + phi));
-			drive.position.theta = PI - drive.position.theta - phi;
+			drive.position.theta = drive.position.theta + phi;
 		} else {
-			drive.position.x -= leftDist * sin(drive.position.theta);
-			drive.position.y += leftDist * cos(drive.position.theta);
+			drive.position.x += leftDist * cos(drive.position.theta);
+			drive.position.y += leftDist * sin(drive.position.theta);
 		}
 	}
 

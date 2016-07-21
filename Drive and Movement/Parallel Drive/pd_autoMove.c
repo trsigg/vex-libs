@@ -88,7 +88,7 @@ void turn(parallel_drive &drive, float degreesToTurn, bool runAsTask=false, int 
 			turnData.coeff = coeff;
 		}
 
-		clearGyro(autoDrive);
+		resetGyro(autoDrive);
 
 		if (runAsTask) {
 			startTask(turnTask);
@@ -146,7 +146,7 @@ void driveStraightRuntime() {
 
 	driveData.totalClicks += encoderVal(autoDrive);
 	if (encoderVal(autoDrive)*100/driveData.sampleTime > driveData.minSpeed) driveData.timer = resetTimer(); //track timeout state
-	clearEncoders(autoDrive);
+	resetEncoders(autoDrive);
 }
 
 void driveStraightEnd() {
@@ -202,8 +202,8 @@ void driveStraight(parallel_drive &drive, int clicks, int delayAtEnd=250, int po
 	}
 
 	//initialize sensors
-	clearEncoders(autoDrive);
-	clearGyro(autoDrive);
+	resetEncoders(autoDrive);
+	resetGyro(autoDrive);
 
 	driveData.timer = resetTimer();
 

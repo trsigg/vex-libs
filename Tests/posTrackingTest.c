@@ -10,7 +10,10 @@
 #include "parallelDrive.c"
 
 parallel_drive drive;
-float da, dl, dr, ra, rl, rr;
+robotPosition position;
+
+float gyroError = 0;
+float gyro = 0;
 
 task main() {
 	initializeDrive(drive);
@@ -18,20 +21,20 @@ task main() {
 	setRightMotors(drive, 2, rfd, rbd);
 	attachGyro(drive, Yaw);
 	attachEncoderL(drive, leftE);
-	attachEncoderR(drive, rightE);
+	attachEncoderR(drive, rightE, true);
 
 	while (true) {
 		driveRuntime(drive);
+		position = *updatePosition(drive);
 
-		da = encoderVal(drive);
-		dl = encoderVal_L(drive);
-		dr = encoderVal_R(drive);
-		ra = encoderVal(drive, true);
-		rl = encoderVal_L(drive, true);
-		rr = encoderVal_R(drive, true);
+		gyroError = gyroVal(drive, RADIANS) - drive.position.theta;
+		gyro = gyroVal(drive, RADIANS);
 
 		if (vexRT[Btn5D] == 1) drive.width = calculateWidth(drive);
 
-		if (vexRT[Btn6D] == 1) resetEncoders(drive);
+		if (vexRT[Btn6D] == 1) {
+			setRobotPosition(drive, 0, 0, 0);
+			resetGyro(drive);
+		}
 	}
 }
