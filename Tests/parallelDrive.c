@@ -342,7 +342,7 @@ robotPosition *updatePosition(parallel_drive &drive) {
 
 void setDriveSide(parallel_drive &drive, bool leftSide) {
 	int input = vexRT[leftSide ? drive.leftInput : drive.rightInput];
-	int drivePower = sgn(input) * drive.powerCoeff * power(input, drive.powMap) / power(127, drive.powMap-1); //adjust input using powMap and powerCoeff
+	int drivePower = sgn(input) * drive.powerCoeff * abs(pow(input, drive.powMap)) / pow(127, drive.powMap-1); //adjust input using powMap and powerCoeff
 
 	if (abs(drivePower) < drive.deadband) drivePower = 0;
 
