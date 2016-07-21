@@ -32,6 +32,7 @@
 
 	8. To access a sensor value, call encoderVal(driveName), encoderVal_L(driveName), encoderVal_R(driveName), or gyroVal(driveName).
 		Encoder values are converted into distance ones unless optional rawValue argument is set to true.
+		The optional output argument accepts DEGREES, RADIANS, or RAW, and controls the output format of the function.
 
 	9. To clear a sensor, call clearEncoders(driveName), clearLeft(driveName), clearRight(driveName), or clearGyro(driveName)
 
@@ -40,12 +41,15 @@
 	11.To have the robot's position automatically updated (very experimental feature), include the following line of code in the main loop
 			| updatePosition(driveName);
 		This function returns a robotPosition object.
+
+	12.To auto-calculate a drive's width, write a test program creating a parallel drive with a gyro and at least one encoder.
+		The function calculateWidth(driveName) will cause the robot to turn several times, using gyro and encoder values to calculate the width of the drive. It returns a float.
 */
 
 #include "coreIncludes.c"
 #include "timer.c"
 
-typedef enum encoderConfig { NONE, LEFT, RIGHT, AVERAGE };
+enum encoderConfig { NONE, LEFT, RIGHT, AVERAGE };
 
 typedef struct {
 	float x;
@@ -190,9 +194,13 @@ float encoderVal_R(parallel_drive &drive, bool rawValue=false) {
 	}
 }
 
-float encoderVal(parallel_drive &drive, bool rawValue=false) {
+float encoderVal(parallel_drive &drive, bool rawValue=false, bool absolute=true) {
 	if (drive.encoderConfig==AVERAGE) {
-		return (encoderVal_L(drive, rawValue) + encoderVal_R(drive, rawValue)) / 2;
+		if (absolute) {
+			return (abs(encoderVal_L(drive, rawValue)) + abs(encoderVal_R(drive, rawValue))) / 2;
+		} else {
+			return (encoderVal_L(drive, rawValue) + encoderVal_R(drive, rawValue)) / 2;
+		}
 	} else if (drive.encoderConfig==LEFT) {
 		return encoderVal_L(drive, rawValue);
 	} else if (drive.encoderConfig==RIGHT) {
@@ -219,9 +227,17 @@ void clearEncoders(parallel_drive &drive) {
 	clearRight(drive);
 }
 
-int gyroVal(parallel_drive &drive) {
+enum gyroOutputType { DEGREES, RADIANS, RAW };
+
+float gyroVal(parallel_drive &drive, gyroOutputType output=DEGREES) {
 	if (drive.hasGyro) {
-		return SensorValue[drive.gyro];
+		if (output == DEGREES) {
+			return SensorValue[drive.gyro] / 10;
+		} else if (output == RADIANS) {
+			return SensorValue[drive.gyro] * PI / 1800;
+		} else {
+			return SensorValue[drive.gyro];
+		}
 	} else {
 		return 0;
 	}
@@ -253,6 +269,31 @@ void setDrivePower (parallel_drive &drive, int left, int right) {
 	setRightPower(drive, right);
 }
 //end set drive power region
+
+
+//misc
+float calculateWidth(parallel_drive &drive, int iterations=4, int power=40, int brakePower=10, int brakeDelay=250) {
+	float avgWidth = 0;
+
+	if (drive.hasGyro && drive.encoderConfig != NONE) {
+		for (int i=1; i<=iterations; i++) {
+			clearEncoders(drive);
+			clearGyro(drive);
+			setDrivePower(drive, pow(-1, i) * power, pow(-1, i+1) * power); //start turn
+
+			while (abs(gyroVal(drive, RAW)) < 3600) {} //wait for turn to complete
+
+			avgWidth += encoderVal(drive) * 3600 / (iterations * PI * gyroVal(drive, RAW)); //update avgWidth
+
+			setDrivePower(drive, pow(-1, i+1) * brakePower, pow(-1, i) * brakePower); //brake
+			wait1Msec(brakeDelay);
+		}
+	}
+
+	return avgWidth;
+}
+//end misc
+
 
 //runtime functions region
 robotPosition *updatePosition(parallel_drive &drive) {

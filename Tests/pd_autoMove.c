@@ -39,11 +39,11 @@ struct turnData {
 };
 
 bool turnIsComplete() {
-	return abs(gyroVal(turnData.drive)) >= abs(turnData.degreesToTurn); //might need to be &turnData.drive. I dunno.
+	return abs(gyroVal(turnData.drive, RAW)) >= abs(turnData.degreesToTurn); //might need to be &turnData.drive. I dunno.
 }
 
 void turnRuntime() {
-	int gyro = abs(gyroVal(turnData.drive));
+	int gyro = abs(gyroVal(turnData.drive, RAW));
 	int power = turnData.coeff * gyro * pow(turnData.degreesToTurn - gyro, turnData.exponent);
 
 	setDrivePower(turnData.drive, turnData.direction * power, -direction * power);
@@ -130,7 +130,7 @@ void driveStraightRuntime() {
 
 	//calculate error value
 	if (driveData.correctionType == GYRO) {
-		driveData.error = gyroVal(driveData.drive);
+		driveData.error = gyroVal(driveData.drive, RAW);
 	} else if (driveData.correctionType == ENCODER) {
 		driveData.error = encoderVal_R(driveData.drive) - encoderVal_L(driveData.drive);
 	} else {
