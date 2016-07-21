@@ -58,28 +58,28 @@ typedef struct {
 } robotPosition;
 
 typedef struct {
-		bool isRamped; //whether drive is ramped
-		int msPerPowerChange; //if ramping, time between motor power changes, calculated using maxAcc100ms
-		int deadband; //range of motor values around 0 for which motors are not engaged
-		float powMap; //degree of polynomial to which inputs are mapped (1 for linear)
-		float powerCoeff; //factor by which motor speeds are multiplied
-		robotPosition position; //(x, y) coordinates and orientation of robot
-		float width; //width of drive in inches (wheel well to wheel well). Used to track position.
-		int minSampleTime; //minimum wait before updating robot position
-		TVexJoysticks leftInput; //id of remote channel used to calculate power of left side of drive (usually Ch3)
-		TVexJoysticks rightInput; //id of remote channel used to calculate power of right side of drive (usually Ch2)
-		//internal variables
-		long lastUpdatedLeft, lastUpdatedRight; //ramping
-		long posLastUpdated; //position tracking
-		int numLeftMotors, numRightMotors;
-		//motor ports used for drive
-		tMotor rightMotors[6];
-		tMotor leftMotors[6];
-		//associated sensors
-		encoderConfig encoderConfig;
-		bool hasGyro, hasEncoderL, hasEncoderR;
-		float leftEncCoeff, rightEncCoeff; //coefficients used to translate encoder values to distance traveled
-		tSensors gyro, leftEncoder, rightEncoder;
+	bool isRamped; //whether drive is ramped
+	int msPerPowerChange; //if ramping, time between motor power changes, calculated using maxAcc100ms
+	int deadband; //range of motor values around 0 for which motors are not engaged
+	float powMap; //degree of polynomial to which inputs are mapped (1 for linear)
+	float powerCoeff; //factor by which motor speeds are multiplied
+	robotPosition position; //(x, y) coordinates and orientation of robot
+	float width; //width of drive in inches (wheel well to wheel well). Used to track position.
+	int minSampleTime; //minimum wait before updating robot position
+	TVexJoysticks leftInput; //id of remote channel used to calculate power of left side of drive (usually Ch3)
+	TVexJoysticks rightInput; //id of remote channel used to calculate power of right side of drive (usually Ch2)
+	//internal variables
+	long lastUpdatedLeft, lastUpdatedRight; //ramping
+	long posLastUpdated; //position tracking
+	int numLeftMotors, numRightMotors;
+	//motor ports used for drive
+	tMotor rightMotors[6];
+	tMotor leftMotors[6];
+	//associated sensors
+	encoderConfig encoderConfig;
+	bool hasGyro, hasEncoderL, hasEncoderR;
+	float leftEncCoeff, rightEncCoeff; //coefficients used to translate encoder values to distance traveled
+	tSensors gyro, leftEncoder, rightEncoder;
 } parallel_drive;
 
 
@@ -154,14 +154,14 @@ void updateEncoderConfig(parallel_drive &drive) {
 void attachEncoderL(parallel_drive &drive, tSensors encoder, float wheelDiameter=3.25, float gearRatio=1) {
 	drive.leftEncoder = encoder;
 	drive.hasEncoderL = true;
-	drive.leftEncCoeff = PI * wheelDiameter * gearRatio / 90;
+	drive.leftEncCoeff = PI * wheelDiameter * gearRatio / 360;
 	updateEncoderConfig(drive);
 }
 
 void attachEncoderR(parallel_drive &drive, tSensors encoder, float wheelDiameter=3.25, float gearRatio=1) {
 	drive.rightEncoder = encoder;
 	drive.hasEncoderR = true;
-	drive.rightEncCoeff = PI * wheelDiameter * gearRatio / 90;
+	drive.rightEncCoeff = PI * wheelDiameter * gearRatio / 360;
 	updateEncoderConfig(drive);
 }
 
@@ -272,25 +272,30 @@ void setDrivePower (parallel_drive &drive, int left, int right) {
 
 
 //misc
-float calculateWidth(parallel_drive &drive, int iterations=4, int power=40, int brakePower=10, int brakeDelay=250) {
-	float avgWidth = 0;
-
+float calculateWidth(parallel_drive &drive, int duration=10000, int sampleTime=200, int power=80, int reverseDelay=750) {
 	if (drive.hasGyro && drive.encoderConfig != NONE) {
-		for (int i=1; i<=iterations; i++) {
-			clearEncoders(drive);
-			clearGyro(drive);
-			setDrivePower(drive, pow(-1, i) * power, pow(-1, i+1) * power); //start turn
+		long timer;
+		float totalWidth = 0;
+		int samples = 0;
 
-			while (abs(gyroVal(drive, RAW)) < 3600) {} //wait for turn to complete
+		for (int i=1; i>=0; i--) { //turn both directions
+			setDrivePower(drive, (2*i-1) * power, (1-2*i) * power); //formula to reverse direction
+			wait1Msec(reverseDelay * i); //delay second time only
+			timer = resetTimer();
 
-			avgWidth += encoderVal(drive) * 3600 / (iterations * PI * gyroVal(drive, RAW)); //update avgWidth
+			while (time(timer) < (duration-reverseDelay)/2) {
+				clearEncoders(drive);
+				clearGyro(drive);
+				wait1Msec(sampleTime);
 
-			setDrivePower(drive, pow(-1, i+1) * brakePower, pow(-1, i) * brakePower); //brake
-			wait1Msec(brakeDelay);
+				totalWidth += encoderVal(drive) * 3600 / (PI * abs(gyroVal(drive, RAW)));
+				samples++;
+			}
 		}
+		return totalWidth / samples;
+	} else {
+		return 0;
 	}
-
-	return avgWidth;
 }
 //end misc
 
