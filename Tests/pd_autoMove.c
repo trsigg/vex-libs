@@ -26,35 +26,38 @@
 #include "PID.c"
 #include "timer.c"
 
+parallel_drive autoDrive;
+
 
 //turning region
-struct turnData {
-	struct parallel_drive *drive;
+typedef struct {
 	int degreesToTurn; //positive for clockwise, negative for counterclockwise
 	int waitAtEnd; //delay after finishing turn (default 100ms for braking)
 	float coeff; //coefficient in ramping equation. Use a negative input to have it autocalculated based on a motor power value instead (it will be set to a value such that the maximum motor power during the turn is the value provided)
 	float exponent; //exponent in ramping equation.  Higher values mean drive accelerates faster and slows more gradually, and vice-versa
 	bool isTurning; //whether turn is executing (useful for running as task)
 	int direction; //internal variable, sign of degreesToTurn
-};
+} turnStruct;
+
+turnStruct turnData;
 
 bool turnIsComplete() {
-	return abs(gyroVal(turnData.drive, RAW)) >= abs(turnData.degreesToTurn); //might need to be &turnData.drive. I dunno.
+	return abs(gyroVal(autoDrive, RAW)) >= abs(turnData.degreesToTurn);
 }
 
 void turnRuntime() {
-	int gyro = abs(gyroVal(turnData.drive, RAW));
+	int gyro = abs(gyroVal(autoDrive, RAW));
 	int power = turnData.coeff * gyro * pow(turnData.degreesToTurn - gyro, turnData.exponent);
 
-	setDrivePower(turnData.drive, turnData.direction * power, -direction * power);
+	setDrivePower(autoDrive, turnData.direction * power, -turnData.direction * power);
 }
 
 void turnEnd() {
 	//brake
-	setDrivePower(turnData.drive, -turnData.direction * 10, turnData.direction * 10);
+	setDrivePower(autoDrive, -turnData.direction * 10, turnData.direction * 10);
 	int brakeDelay = limit(0, 100, turnData.waitAtEnd);
 	wait1Msec(brakeDelay);
-	setDrivePower(turnData.drive, 0, 0);
+	setDrivePower(autoDrive, 0, 0);
 
 	turnData.isTurning = false;
 	wait1Msec(turnData.waitAtEnd);
@@ -71,7 +74,7 @@ task turnTask() {
 void turn(parallel_drive &drive, float degreesToTurn, bool runAsTask=false, int waitAtEnd=100, float coeff=-115, float exponent=1) {
 	if (drive.hasGyro) {
 		//initialize variables
-		turnData.drive = drive;
+		autoDrive = drive;
 		turnData.degreesToTurn = abs(degreesToTurn * 10); //gyro outputs are in degrees*10
 		turnData.waitAtEnd = (waitAtEnd>100 ? waitAtEnd-100 : 0);
 		turnData.exponent = exponent;
@@ -85,7 +88,7 @@ void turn(parallel_drive &drive, float degreesToTurn, bool runAsTask=false, int 
 			turnData.coeff = coeff;
 		}
 
-		clearGyro(turnData.drive);
+		clearGyro(autoDrive);
 
 		if (runAsTask) {
 			startTask(turnTask);
@@ -102,8 +105,7 @@ void turn(parallel_drive &drive, float degreesToTurn, bool runAsTask=false, int 
 //driveStraight region
 typedef enum correctionType { NONE, GYRO, ENCODER, AUTO };
 
-struct driveData {
-	parallel_drive *drive;
+typedef struct {
 	int clicks; //distance to drive, in encoder clicks
 	int delayAtEnd; //duration of pause at end of driving
 	int power; //motor power while driving
@@ -119,20 +121,22 @@ struct driveData {
 	int slavePower; //power of right side of drive
 	int error; //calculated from gyro or encoders
 	long timer; //for tracking timeout
-};
+} driveStruct;
+
+driveStruct driveData;
 
 bool drivingComplete() {
 	return abs(driveData.totalClicks)<driveData.clicks  && time(driveData.timer)<driveData.timeout;
 }
 
 void driveStraightRuntime() {
-	setDrivePower(driveData.drive, driveData.slavePower * driveData.direction, driveData.power * driveData.direction);
+	setDrivePower(autoDrive, driveData.slavePower * driveData.direction, driveData.power * driveData.direction);
 
 	//calculate error value
 	if (driveData.correctionType == GYRO) {
-		driveData.error = gyroVal(driveData.drive, RAW);
+		driveData.error = gyroVal(autoDrive, RAW);
 	} else if (driveData.correctionType == ENCODER) {
-		driveData.error = encoderVal_R(driveData.drive) - encoderVal_L(driveData.drive);
+		driveData.error = encoderVal_R(autoDrive) - encoderVal_L(autoDrive);
 	} else {
 		driveData.error = 0;
 	}
@@ -140,13 +144,13 @@ void driveStraightRuntime() {
 	//adjust slavePower based on error
 	driveData.slavePower += driveData.error * driveData.direction / driveData.coeff;
 
-	driveData.totalClicks += encoderVal(driveData.drive);
-	if (encoderVal(driveData.drive)*100/driveData.sampleTime > driveData.minSpeed) driveData.timer = resetTimer(); //track timeout state
-	clearEncoders(driveData.drive);
+	driveData.totalClicks += encoderVal(autoDrive);
+	if (encoderVal(autoDrive)*100/driveData.sampleTime > driveData.minSpeed) driveData.timer = resetTimer(); //track timeout state
+	clearEncoders(autoDrive);
 }
 
 void driveStraightEnd() {
-	setDrivePower(driveData.drive, 0, 0);
+	setDrivePower(autoDrive, 0, 0);
 	wait1Msec(driveData.delayAtEnd);
 	driveData.isDriving = false;
 }
@@ -161,9 +165,9 @@ task driveStraightTask() {
 }
 
 void setCorrectionType(correctionType type) {
-	if (type==GYRO && driveData.drive->hasGyro) {
+	if (type==GYRO && autoDrive.hasGyro) {
 		driveData.correctionType = GYRO;
-	} else if (type==ENCODER && driveData.drive->hasEncoderL && driveData.drive->hasEncoderR) {
+	} else if (type==ENCODER && autoDrive.hasEncoderL && autoDrive.hasEncoderR) {
 		driveData.correctionType = ENCODER;
 	} else {
 		driveData.correctionType = NONE;
@@ -172,7 +176,7 @@ void setCorrectionType(correctionType type) {
 
 void driveStraight(parallel_drive &drive, int clicks, int delayAtEnd=250, int power=60, bool startAsTask=false, int minSpeed=20, int timeout=800, float coeff=300, int sampleTime=100, int powDiff=5, correctionType correctionType=AUTO) {
 	//initialize variables
-	driveData.drive = drive;
+	autoDrive = drive;
 	driveData.clicks = abs(clicks);
 	driveData.direction = sgn(clicks);
 	driveData.power = power;
@@ -198,8 +202,8 @@ void driveStraight(parallel_drive &drive, int clicks, int delayAtEnd=250, int po
 	}
 
 	//initialize sensors
-	clearEncoders(driveData.drive);
-	clearGyro(driveData.drive);
+	clearEncoders(autoDrive);
+	clearGyro(autoDrive);
 
 	driveData.timer = resetTimer();
 
