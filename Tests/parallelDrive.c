@@ -291,17 +291,17 @@ float calculateWidth(parallel_drive &drive, int duration=10000, int sampleTime=2
 		long timer;
 		float totalWidth = 0;
 		int samples = 0;
-		
-		for (int i=1; i>=0; i--) { //turn both directions 
+
+		for (int i=1; i>=0; i--) { //turn both directions
 			setDrivePower(drive, (2*i-1) * power, (1-2*i) * power); //formula to reverse direction
 			wait1Msec(reverseDelay * i); //delay second time only
 			timer = resetTimer();
-			
+
 			while (time(timer) < (duration-reverseDelay)/2) {
 				resetEncoders(drive);
 				resetGyro(drive);
 				wait1Msec(sampleTime);
-				
+
 				totalWidth += encoderVal(drive) * 3600 / (PI * abs(gyroVal(drive, RAW)));
 				samples++;
 			}
