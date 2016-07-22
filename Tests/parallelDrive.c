@@ -52,6 +52,7 @@
 #include "timer.c"
 
 enum encoderConfig { NONE, LEFT, RIGHT, AVERAGE };
+enum gyroCorrectionType { NONE, MEDIUM, FULL };
 
 typedef struct {
 	float x;
@@ -76,7 +77,7 @@ typedef struct {
 	int numLeftMotors, numRightMotors;
 	//position tracking
 	long posLastUpdated;
-	bool gyroCorrection;
+	gyroCorrectionType gyroCorrection;
 	//motor ports used for drive
 	tMotor rightMotors[6];
 	tMotor leftMotors[6];
@@ -102,6 +103,7 @@ void initializeDrive(parallel_drive &drive, bool isRamped=false, int maxAcc100ms
 	drive.minSampleTime = minSampleTime;
 	drive.leftInput = leftInput;
 	drive.rightInput = rightInput;
+	drive.gyroCorrection = NONE;
 	drive.lastUpdatedLeft = nPgmTime;
 	drive.lastUpdatedRight = nPgmTime;
 	drive.posLastUpdated = resetTimer();
@@ -166,10 +168,10 @@ void attachEncoderR(parallel_drive &drive, tSensors encoder, bool reversed=false
 }
 
 
-void attachGyro(parallel_drive &drive, tSensors gyro, bool useGyroCorrection=false, bool setAbsAngle=true) {
+void attachGyro(parallel_drive &drive, tSensors gyro, gyroCorrectionType correction=MEDIUM, bool setAbsAngle=true) {
 	drive.gyro = gyro;
 	drive.hasGyro = true;
-	drive.gyroCorrection = useGyroCorrection;
+	drive.gyroCorrection = correction;
 
 	if (setAbsAngle) drive.angleOffset = drive.position.theta - SensorValue[gyro];
 }
@@ -271,16 +273,16 @@ robotPosition *updatePosition(parallel_drive &drive) {
 	if (time(drive.posLastUpdated) >= drive.minSampleTime) {
 		float leftDist = encoderVal_L(drive);
 		float rightDist = encoderVal_R(drive);
+		float angle = absAngle(drive, RADIANS);
 		resetEncoders(drive);
 
 		drive.posLastUpdated = resetTimer();
 
-		if (drive.gyroCorrection) {
-			float deltaT = absAngle(drive, RADIANS) - drive.position.theta;
+		if (drive.gyroCorrection == FULL && rightDist+leftDist != 0) {
+			float deltaT = angle - drive.position.theta;
 			float correctionFactor = (rightDist - leftDist - drive.width*deltaT) / (rightDist + leftDist);
 			leftDist *= 1 + correctionFactor;
 			rightDist *= 1 - correctionFactor;
-			drive.position.theta += deltaT;
 		}
 
 		if (rightDist != leftDist && leftDist != 0) {
@@ -289,7 +291,7 @@ robotPosition *updatePosition(parallel_drive &drive) {
 
 			drive.position.x += r * (sin(drive.position.theta + phi) - sin(drive.position.theta));
 			drive.position.y += r * (cos(drive.position.theta) - cos(drive.position.theta + phi));
-			if (!drive.gyroCorrection) drive.position.theta = drive.position.theta + phi;
+			drive.position.theta = (drive.gyroCorrection==NONE ? drive.position.theta+phi : angle);
 		} else {
 			drive.position.x += leftDist * cos(drive.position.theta);
 			drive.position.y += leftDist * sin(drive.position.theta);

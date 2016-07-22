@@ -28,7 +28,7 @@ task main() {
 		position = *updatePosition(drive);
 
 		gyroError = gyroVal(drive, RADIANS) - drive.position.theta;
-		gyro = gyroVal(drive, RADIANS);
+		gyro = gyroVal(drive, DEGREES);
 
 		if (vexRT[Btn5D] == 1) drive.width = calculateWidth(drive);
 
