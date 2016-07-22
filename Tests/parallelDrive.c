@@ -72,9 +72,11 @@ typedef struct {
 	TVexJoysticks rightInput; //id of remote channel used to calculate power of right side of drive (usually Ch2)
 	//internal variables
 	long lastUpdatedLeft, lastUpdatedRight; //ramping
-	long posLastUpdated; //position tracking
 	float angleOffset; //amount added to gyro values to obtain absolute angle
 	int numLeftMotors, numRightMotors;
+	//position tracking
+	long posLastUpdated;
+	bool gyroCorrection;
 	//motor ports used for drive
 	tMotor rightMotors[6];
 	tMotor leftMotors[6];
@@ -164,9 +166,10 @@ void attachEncoderR(parallel_drive &drive, tSensors encoder, bool reversed=false
 }
 
 
-void attachGyro(parallel_drive &drive, tSensors gyro, bool setAbsAngle=true) {
+void attachGyro(parallel_drive &drive, tSensors gyro, bool useGyroCorrection=false, bool setAbsAngle=true) {
 	drive.gyro = gyro;
 	drive.hasGyro = true;
+	drive.gyroCorrection = useGyroCorrection;
 
 	if (setAbsAngle) drive.angleOffset = drive.position.theta - SensorValue[gyro];
 }
@@ -272,13 +275,21 @@ robotPosition *updatePosition(parallel_drive &drive) {
 
 		drive.posLastUpdated = resetTimer();
 
+		if (drive.gyroCorrection) {
+			float deltaT = absAngle(drive, RADIANS) - drive.position.theta;
+			float correctionFactor = (rightDist - leftDist - drive.width*deltaT) / (rightDist + leftDist);
+			leftDist *= 1 + correctionFactor;
+			rightDist *= 1 - correctionFactor;
+			drive.position.theta += deltaT;
+		}
+
 		if (rightDist != leftDist && leftDist != 0) {
 			float r = drive.width/(rightDist/leftDist - 1.0) + drive.width/2;
 			float phi = (rightDist - leftDist) / drive.width;
 
 			drive.position.x += r * (sin(drive.position.theta + phi) - sin(drive.position.theta));
 			drive.position.y += r * (cos(drive.position.theta) - cos(drive.position.theta + phi));
-			drive.position.theta = drive.position.theta + phi;
+			if (!drive.gyroCorrection) drive.position.theta = drive.position.theta + phi;
 		} else {
 			drive.position.x += leftDist * cos(drive.position.theta);
 			drive.position.y += leftDist * sin(drive.position.theta);
