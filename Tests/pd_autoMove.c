@@ -8,8 +8,9 @@
 			| #include "pd_autoMove.c"
 
 -----------------  FOR TURNING  -----------------
-	1. Call turn(driveName, degreesToTurn) where driveName is a parallel_drive object with a gyro attached
-	    Optional arguments can be used to configure whether to run as a task or function, the duration of the delay at the end of the turn, and the equation used to determine motor powers throughout the maneuver
+	1. Call turn(driveName, angle) where driveName is a parallel_drive object with a gyro attached
+	    Optional arguments can be used to configure the angle input type, whether to run as a task or function,
+	    the initial and maximum motor powers duting the maneuver, and the duration of the delay at the end of the turn
 
 	2. The variable turnData.isTurning holds the status of the turn (true if turning, false otherwise)
 
@@ -19,6 +20,8 @@
 		the timeout duration, correction coefficient, sample time, initial difference in power between master and slave sides of the drive, and sensors used for correction
 
 	2. The variable driveData.isDriving holds the status of the maneuver (true if driving, false otherwise)
+
+	Note: the functions _turn_() and _driveStraight_() are much less user friendly, but can be used in place of turn() and driveStraight() to more finely configure robot behavior
 */
 
 #include "coreIncludes.c"
@@ -26,41 +29,42 @@
 #include "PID.c"
 #include "timer.c"
 
+
 parallel_drive autoDrive;
 
 
 //turning region
 typedef struct {
-	int degreesToTurn; //positive for clockwise, negative for counterclockwise
+	int angle; //positive for clockwise, negative for counterclockwise
 	int waitAtEnd; //delay after finishing turn (default 100ms for braking)
-	float coeff; //coefficient in ramping equation. Use a negative input to have it autocalculated based on a motor power value instead (it will be set to a value such that the maximum motor power during the turn is the value provided)
-	float exponent; //exponent in ramping equation.  Higher values mean drive accelerates faster and slows more gradually, and vice-versa
+	int brakePower; //the motor power while braking
 	bool isTurning; //whether turn is executing (useful for running as task)
-	int direction; //internal variable, sign of degreesToTurn
+	int direction; //internal variable, sign of angle
+	float coeff, offset, exponent; //ramping equation constants
 } turnStruct;
 
 turnStruct turnData;
 
 bool turnIsComplete() {
-	return abs(gyroVal(autoDrive, RAW)) >= abs(turnData.degreesToTurn);
+	return abs(gyroVal(autoDrive, RAW)) >= abs(turnData.angle);
 }
 
 void turnRuntime() {
 	int gyro = abs(gyroVal(autoDrive, RAW));
-	int power = turnData.coeff * gyro * pow(turnData.degreesToTurn - gyro, turnData.exponent);
+	int power = turnData.coeff * gyro * pow(turnData.angle - gyro, turnData.exponent);
 
 	setDrivePower(autoDrive, turnData.direction * power, -turnData.direction * power);
 }
 
 void turnEnd() {
 	//brake
-	setDrivePower(autoDrive, -turnData.direction * 10, turnData.direction * 10);
+	setDrivePower(autoDrive, -turnData.direction * turnData.brakePower, turnData.direction * turnData.brakePower);
 	int brakeDelay = limit(0, 100, turnData.waitAtEnd);
 	wait1Msec(brakeDelay);
 	setDrivePower(autoDrive, 0, 0);
 
-	turnData.isTurning = false;
 	wait1Msec(turnData.waitAtEnd);
+	turnData.isTurning = false;
 }
 
 task turnTask() {
@@ -71,22 +75,15 @@ task turnTask() {
 	turnEnd();
 }
 
-void turn(parallel_drive &drive, float degreesToTurn, bool runAsTask=false, int waitAtEnd=100, float coeff=-115, float exponent=1) {
+void _turn_(parallel_drive &drive, int angle, float coeff, float offset, bool runAsTask=false, int waitAtEnd=100, int brakePower=10, float exponent=1) { //Internal function. Use at your own risk.
 	if (drive.hasGyro) {
 		//initialize variables
 		autoDrive = drive;
-		turnData.degreesToTurn = abs(degreesToTurn * 10); //gyro outputs are in degrees*10
+		turnData.angle = abs(angle);
 		turnData.waitAtEnd = (waitAtEnd>100 ? waitAtEnd-100 : 0);
 		turnData.exponent = exponent;
 		turnData.isTurning = true;
-		turnData.direction = sgn(degreesToTurn);
-
-		//set coefficient
-		if (coeff < 0) {
-			turnData.coeff = -coeff * pow(2/turnData.degreesToTurn, exponent+1); //solve for coefficient which produces specified maximum motor value
-		} else {
-			turnData.coeff = coeff;
-		}
+		turnData.direction = sgn(angle);
 
 		resetGyro(autoDrive);
 
@@ -98,6 +95,14 @@ void turn(parallel_drive &drive, float degreesToTurn, bool runAsTask=false, int 
 			turnEnd();
 		}
 	}
+}
+
+void turn(parallel_drive &drive, float angle, angleType angleType=DEGREES, bool runAsTask=false, float initialPower=40, float maxPower=100, int waitAtEnd=100, int brakePower) {
+	angle = convertAngle(angle, RAW, angleType);
+	float offset = (2*angle*maxPower - angle*initialPower - 2*angle*pow(maxPower*(maxPower-initialPower), 0.5)) / initialPower;
+	float coeff = initialPower / (offset * angle);
+
+	_turn_(drive, angle, coeff, offset, runAsTask, waitAtEnd, brakePower);
 }
 //end turning region
 
