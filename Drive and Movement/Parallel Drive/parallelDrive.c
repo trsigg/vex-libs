@@ -185,7 +185,7 @@ void setEncoderConfig(parallel_drive &drive, encoderConfig config) {
 //sensor access region
 float encoderVal_L(parallel_drive &drive, bool rawValue=false) {
 	if (drive.hasEncoderL) {
-		return SensorValue[drive.leftEncoder] * (rawValue ? 1 : drive.leftEncCoeff);
+		return SensorValue[drive.leftEncoder] * (rawValue ? sgn(drive.leftEncCoeff) : drive.leftEncCoeff);
 	} else {
 		return 0;
 	}
@@ -193,7 +193,7 @@ float encoderVal_L(parallel_drive &drive, bool rawValue=false) {
 
 float encoderVal_R(parallel_drive &drive, bool rawValue=false) {
 	if (drive.hasEncoderR) {
-		return SensorValue[drive.rightEncoder] * (rawValue ? 1 : drive.rightEncCoeff);
+		return SensorValue[drive.rightEncoder] * (rawValue ? sgn(drive.rightEncCoeff) : drive.rightEncCoeff);
 	} else {
 		return 0;
 	}

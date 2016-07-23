@@ -11,6 +11,7 @@
 			| PID pidName;
 			| initializePID(pidName, &input, kP, kI, kD, target);
 		 Where pidName can be any legal variable name; input is the variable storing the input value; kP, kI, and kD are tuning constants; and target is the target value
+		 To use input as the error value, set target to 0
 		 The optional arguments can be used to configure the minimum sample time and initial state of the inputUpdated variable
 
 	4. Whenever the controller should be updated (probably once every input cycle) include the following line of code:
@@ -56,7 +57,8 @@ float PID_runtime(PID &pid) {
 	pid.lastUpdated = now;
 
 	if (pid.inputUpdated && elapsed > pid.minSampleTime) {
-		float error = pid.target - *(pid.input);
+		float input = *(pid.input);
+		float error = (pid.target == 0 ? input : pid.target-input);
 
 		pid.integral += (pid.integralMin==NULL || error>pid.integralMin) && (pid.integralMax==NULL || error>pid.integralMax) ? (error + pid.prevError)*elapsed/2 : 0; //update integral if within bounds of integralMin and integralMax
 
@@ -65,4 +67,22 @@ float PID_runtime(PID &pid) {
 	}
 
 	return pid.output;
+}
+
+float PID_pointerRuntime(PID *pid) {
+	long now = nPgmTime;
+	long elapsed = now - pid->lastUpdated;
+	pid->lastUpdated = now;
+
+	if (pid->inputUpdated && elapsed > pid->minSampleTime) {
+		float input = *(pid->input);
+		float error = (pid->target == 0 ? input : pid->target-input);
+
+		pid->integral += (pid->integralMin==NULL || error>pid->integralMin) && (pid->integralMax==NULL || error>pid->integralMax) ? (error + pid->prevError)*elapsed/2 : 0; //update integral if within bounds of integralMin and integralMax
+
+		pid->output = pid->kP*error + pid->kI*pid->integral + pid->kD*(error - pid->prevError)/elapsed;
+		pid->prevError = error;
+	}
+
+	return pid->output;
 }
