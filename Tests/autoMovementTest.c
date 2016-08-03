@@ -12,9 +12,9 @@
 #include "pd_autoMove.c"
 
 void autonomous() {
-	driveStraight(drive, 24);
+	//driveStraight(drive, 24);
 	turn(drive, -90);
-	driveStraight(drive, 48);
+	//driveStraight(drive, 48);
 }
 
 task main() {

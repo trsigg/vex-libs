@@ -84,6 +84,7 @@ typedef struct {
 	//associated sensors
 	encoderConfig encoderConfig;
 	bool hasGyro, hasEncoderL, hasEncoderR;
+	bool gyroReversed;
 	float leftEncCoeff, rightEncCoeff; //coefficients used to translate encoder values to distance traveled
 	tSensors gyro, leftEncoder, rightEncoder;
 } parallel_drive;
@@ -168,9 +169,10 @@ void attachEncoderR(parallel_drive &drive, tSensors encoder, bool reversed=false
 }
 
 
-void attachGyro(parallel_drive &drive, tSensors gyro, gyroCorrectionType correction=MEDIUM, bool setAbsAngle=true) {
+void attachGyro(parallel_drive &drive, tSensors gyro, bool reversed=true, gyroCorrectionType correction=MEDIUM, bool setAbsAngle=true) {
 	drive.gyro = gyro;
 	drive.hasGyro = true;
+	drive.gyroReversed = reversed;
 	drive.gyroCorrection = correction;
 
 	if (setAbsAngle) drive.angleOffset = drive.position.theta - SensorValue[gyro];
@@ -234,7 +236,7 @@ void resetEncoders(parallel_drive &drive, int resetVal=0) {
 
 float gyroVal(parallel_drive &drive, angleType format=DEGREES) {
 	if (drive.hasGyro) {
-		return convertAngle(SensorValue[drive.gyro], format);
+		return convertAngle(SensorValue[drive.gyro] * (drive.gyroReversed ? 1 : -1), format);
 	} else {
 		return 0;
 	}
@@ -242,11 +244,11 @@ float gyroVal(parallel_drive &drive, angleType format=DEGREES) {
 
 void resetGyro(parallel_drive &drive, float resetVal=0, angleType format=DEGREES, bool setAbsAngle=true) {
 	if (drive.hasGyro) {
-		if (setAbsAngle) drive.angleOffset += SensorValue[drive.gyro];
+		if (setAbsAngle) drive.angleOffset += gyroVal(drive);
 
 		SensorValue[drive.gyro] = (int)(convertAngle(resetVal, RAW, format));
 
-		if (setAbsAngle) drive.angleOffset -= SensorValue[drive.gyro]; //I could include this two lines up, except this function doesn't usually work as expected
+		if (setAbsAngle) drive.angleOffset -= gyroVal(drive); //I could include this two lines up, except this function doesn't usually work as expected
 	}
 }
 

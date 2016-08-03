@@ -12,8 +12,7 @@
 parallel_drive drive;
 robotPosition position;
 
-float gyroError = 0;
-float gyro = 0;
+float da, dl, dr, ra, rl, rr, gyro;
 
 task main() {
 	initializeDrive(drive);
@@ -27,7 +26,12 @@ task main() {
 		driveRuntime(drive);
 		position = *updatePosition(drive);
 
-		gyroError = gyroVal(drive, RADIANS) - drive.position.theta;
+		da = encoderVal(drive);
+		dl = encoderVal_L(drive);
+		dr = encoderVal_R(drive);
+		ra = encoderVal(drive, true);
+		rl = encoderVal_L(drive, true);
+		rr = encoderVal_R(drive, true);
 		gyro = gyroVal(drive, DEGREES);
 
 		if (vexRT[Btn5D] == 1) drive.width = calculateWidth(drive);
