@@ -1,5 +1,4 @@
-/*
-/////////////////  INSTRUCTIONS  /////////////////
+/*///////////////  INSTRUCTIONS  /////////////////
 
 
 	1. Save this file in the same directory as your code
