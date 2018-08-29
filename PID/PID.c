@@ -1,67 +1,80 @@
-/*///////////////  INSTRUCTIONS  /////////////////
-
-
-	1. Save this file in the same directory as your code
-
-	2. Include this line near the top of your code:
-			| #include "PID.c"
-
-	3. To create PID controller, include the following lines in your code:
-			| PID pidName;
-			| initializePID(pidName, &input, kP, kI, kD, target);
-		 Where pidName can be any legal variable name; input is the variable storing the input value; kP, kI, and kD are tuning constants; and target is the target value
-		 To use input as the error value, set target to 0
-		 The optional arguments can be used to configure the minimum sample time and initial state of the inputUpdated variable
-
-	4. Whenever the controller should be updated (probably once every input cycle) include the following line of code:
-			| PID_runtime(pidName);
-	    Where pidName is the same as in the previous step
-
-	5. To change the target value of the PID loop, use
-			| pidName.target = newTarget;
-*/
-
-typedef union {
-	struct {
-		float *input;
+typedef struct {
 		float kP, kI, kD; //tuning coefficients
 		float target;
 		int minSampleTime; //minimum time between sampling input in milliseconds
-		bool inputUpdated; //can optionally be used to signal when input has been updated
-		float integralMin, integralMax; //minimum and maximum error value which will be added to integral
+		float integralMax; //minimum and maximum error value which will be added to integral
+		bool hasMax;
+		bool useTimeCorrection;
 		float output; //can be used to refer to most recent output
 		//internal variables
 		long lastUpdated;
 		float integral;
 		float prevError;
-	};
 } PID;
 
-void initializePID(PID *pid, float *input, float kP, float kI, float kD, float target, int minSampleTime=30, bool inputUpdated=true, float integralMin=NULL, float integralMax=NULL) {
-	pid->input = input;
+void initializePID(PID *pid, float target, float kP, float kI, float kD, int minSampleTime=10, bool useTimeCorrection=true, float integralMax=0) {
 	pid->kP = kP;
 	pid->kI = kI;
 	pid->kD = kD;
 	pid->target = target;
 	pid->minSampleTime = minSampleTime;
-	pid->inputUpdated = inputUpdated;
-	pid->integralMin = integralMin;
+	pid->hasMax = integralMax!=0;
 	pid->integralMax = integralMax;
+	pid->useTimeCorrection = useTimeCorrection;
 	pid->integral = 0;
+	pid->lastUpdated = 0;	//indicates that PID hasn't yet been evaluated
 }
 
-float PID_runtime(PID *pid) {
+void changeTarget(PID *pid, float target, int resetIntegral=true) {
+	pid->prevError += target - pid->target;
+	if (resetIntegral) pid->integral = 0;	//TODO: add more options?
+	pid->lastUpdated = nPgmTime;
+	pid->target = target;
+}
+
+void changeGains(PID *pid, float kP, float kI, float kD) {
+	pid->kP = kP;
+	pid->kI = kI;
+	pid->kD = kD;
+}
+
+void setIntegralMax(PID *pid, float max) {
+	pid->hasMax = true;
+	pid->integralMax = max;
+}
+
+float PID_runtime(PID *pid, float input, int debugStartCol=-1) {
 	long now = nPgmTime;
 	long elapsed = now - pid->lastUpdated;
-	pid->lastUpdated = now;
 
-	if (pid->inputUpdated && elapsed > pid->minSampleTime) {
-		float input = *(pid->input);
-		float error = (pid->target == 0 ? input : pid->target-input);
+	if (elapsed > pid->minSampleTime) {
+		pid->lastUpdated = now;
 
-		pid->integral += (pid->integralMin==NULL || error>pid->integralMin) && (pid->integralMax==NULL || error>pid->integralMax) ? (error + pid->prevError)*elapsed/2 : 0; //update integral if within bounds of integralMin and integralMax
+		float error = pid->target - input;
+		int timeCorrectionFctr = (pid->useTimeCorrection ? elapsed : 1);
 
-		pid->output = pid->kP*error + pid->kI*pid->integral + pid->kD*(error - pid->prevError)/elapsed;
+		float p = pid->kP * error;	//proportional contribution
+		float d = 0;								//derivative contribution
+
+		if (pid->lastUpdated != 0) {
+			if (!pid->hasMax || fabs(pid->output)<pid->integralMax || sgn(pid->kI*error)!=sgn(pid->output))	//TODO: better limiting
+				pid->integral += pid->kI * error * timeCorrectionFctr;	//kI factored in here to avoid problems when changing gain values
+
+			d = pid->kD * (error - pid->prevError) / timeCorrectionFctr;
+		}
+
+		pid->output = p + pid->integral + d;
+
+		if (debugStartCol >= 0) {
+			datalogAddValueWithTimeStamp(debugStartCol, error);
+			datalogAddValueWithTimeStamp(debugStartCol+1, pid->output);
+			datalogAddValueWithTimeStamp(debugStartCol+2, p);
+			datalogAddValueWithTimeStamp(debugStartCol+3, pid->integral);
+			datalogAddValueWithTimeStamp(debugStartCol+4, d);
+			datalogAddValueWithTimeStamp(debugStartCol+5, pid->target);
+			datalogAddValueWithTimeStamp(debugStartCol+6, input);
+		}
+
 		pid->prevError = error;
 	}
 

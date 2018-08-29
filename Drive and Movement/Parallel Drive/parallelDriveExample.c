@@ -9,9 +9,9 @@
 parallel_drive drive;
 
 task main() {
-	initializeDrive(drive);
-	setLeftMotors(drive, 2, ld1, ld2);
-	setRightMotors(drive, 2, rd1, rd2);
+	tMotor LDriveMotors[] = { LDrive1, LDrive2, LSwitchy };
+  	tMotor RDriveMotors[] = { RDrive1, RDrive2, RSwitchy };
+  	initializeDrive(drive, 2, LDriveMotors, 2, RDriveMotors);
 
 	while (true) driveRuntime(drive);
 }
